@@ -237,10 +237,7 @@ GITEOF
 
 push_changes() {
     cd "$PROJECT"
-    if git diff --quiet && git diff --cached --quiet; then
-        log "Nothing to push (clean tree)"
-        return 0
-    fi
+    # Always push — the agent may have committed already (clean working tree but ahead of origin)
     git fetch origin 2>&1 | tee -a "$LOG" || true
     git pull origin main --no-rebase --no-edit 2>&1 | tee -a "$LOG" || true
     git push origin HEAD 2>&1 | tee -a "$LOG" || true
