@@ -136,6 +136,24 @@ JUNK_TRANSCRIPTS = {
     "subtitles by the amara org community",
 }
 
+# Whisper is trained on mountains of YouTube captions, so on silence, breath, or
+# a half-second of noise it emits canned subtitle credits. These are matched
+# anywhere in the transcript with punctuation and spacing ignored, then removed.
+JUNK_PHRASES = [
+    "subtitles by the amara.org community",
+    "subtitles by the amara org community",
+    "subtitles by the amara",
+    "subtitles by",
+    "transcription by",
+    "transcribed by",
+    "subtitles created by",
+    "subbed by",
+    "thanks for watching",
+    "thank you for watching",
+    "please subscribe",
+    "like and subscribe",
+]
+
 
 def log(msg: str) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)

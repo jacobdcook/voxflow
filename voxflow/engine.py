@@ -10,8 +10,49 @@ import traceback
 
 import numpy as np
 
+import re
+
 from voxflow.cleanup import local_cleanup, ollama_rewrite
-from voxflow.config import JUNK_TRANSCRIPTS, load_config, load_vocabulary, log
+from voxflow.config import (
+    JUNK_PHRASES,
+    JUNK_TRANSCRIPTS,
+    load_config,
+    load_vocabulary,
+    log,
+)
+
+
+def _norm_junk(s: str) -> str:
+    """Lowercase and collapse all non-alphanumeric runs to single spaces, so
+    'Amara.org' and 'amara org' compare equal."""
+    return re.sub(r"[^a-z0-9]+", " ", s.lower()).strip()
+
+
+def scrub_hallucinations(raw: str) -> str:
+    """Remove Whisper's canned subtitle-credit hallucinations. Drops the whole
+    transcript if it is nothing but junk; otherwise strips known credit phrases
+    off the front and back and returns the real speech in between."""
+    if not raw:
+        return ""
+    norm_full = _norm_junk(raw)
+    if not norm_full:
+        return ""
+    if norm_full in JUNK_TRANSCRIPTS:
+        return ""
+    # Split into sentence-ish chunks and drop any chunk that is purely a credit.
+    chunks = re.split(r"(?<=[.!?])\s+", raw)
+    kept = []
+    for chunk in chunks:
+        nc = _norm_junk(chunk)
+        if not nc:
+            continue
+        if nc in JUNK_TRANSCRIPTS:
+            continue
+        if any(nc == _norm_junk(p) or nc.startswith(_norm_junk(p)) for p in JUNK_PHRASES):
+            continue
+        kept.append(chunk.strip())
+    out = " ".join(kept).strip()
+    return out
 
 
 _cuda_libs_loaded = False
@@ -175,9 +216,7 @@ class Engine:
                 continue
             parts.append(t)
         raw = " ".join(parts).strip()
-        if raw.lower().strip(" .!?") in JUNK_TRANSCRIPTS:
-            return ""
-        return raw
+        return scrub_hallucinations(raw)
 
     def rewrite(self, text: str, terminal: bool = False) -> str:
         text = text.strip()
