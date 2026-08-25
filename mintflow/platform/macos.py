@@ -727,6 +727,11 @@ class HotkeyGrabber:
         self._block_vk: int | None = None
         self._live_mods: set[str] = set()
         self._repeat_timer: threading.Timer | None = None
+        self.on_cancel = None
+        self._cancel_armed = False
+
+    def set_cancel_armed(self, active: bool) -> None:
+        self._cancel_armed = bool(active)
 
     def start(self) -> None:
         if self._pynput_key is None and not self._keyname.startswith("keycode:"):
@@ -808,6 +813,13 @@ class HotkeyGrabber:
 
     def _on_press(self, key, injected=False) -> None:
         if injected or self._replaying:
+            return
+        if self._cancel_armed and key in (
+            pynput_keyboard.Key.esc,
+            pynput_keyboard.Key.end,
+        ):
+            if self.on_cancel:
+                _schedule_safe(self._schedule, self.on_cancel)
             return
         name = _mod_name(key)
         if name:
@@ -1096,7 +1108,7 @@ class MacBackend:
     def overlay_place(self) -> None:
         self._overlay.place_on_pointer_monitor()
 
-    def hotkey_grab(self, spec, on_press, on_release) -> None:
+    def hotkey_grab(self, spec, on_press, on_release, on_cancel=None) -> None:
         self.hotkey_ungrab()
         tap_ms = int(self.cfg.get("tap_ms", 220))
         repeat_ms = int(self.cfg.get("repeat_ms", 80))
@@ -1108,7 +1120,12 @@ class MacBackend:
             tap_ms=tap_ms,
             repeat_ms=repeat_ms,
         )
+        self._grabber.on_cancel = on_cancel
         self._grabber.start()
+
+    def hotkey_set_cancel(self, active: bool) -> None:
+        if self._grabber is not None:
+            self._grabber.set_cancel_armed(active)
 
     def hotkey_ungrab(self) -> None:
         if self._grabber is None:

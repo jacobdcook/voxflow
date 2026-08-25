@@ -24,7 +24,7 @@ STREAM_TAIL_S = 10.0
 STREAM_MAX_INTERVAL_S = 8.0
 LEVEL_MS = 40
 LOAD_POLL_MS = 80
-DONE_HIDE_MS = 380
+DONE_HIDE_MS = 700
 ERROR_HIDE_MS = 900
 RMS_SILENCE = 0.004
 BUSY_NOTIFY_S = 3.0
@@ -152,11 +152,19 @@ class FlowApp:
         threading.Thread(
             target=self.engine.preload, daemon=True, name="mintflow-preload"
         ).start()
-        self.backend.hotkey_grab(
-            str(self.cfg.get("hotkey") or "pause"),
-            self._on_press,
-            self._on_release,
-        )
+        try:
+            self.backend.hotkey_grab(
+                str(self.cfg.get("hotkey") or "pause"),
+                self._on_press,
+                self._on_release,
+                on_cancel=self.cancel_recording,
+            )
+        except TypeError:
+            self.backend.hotkey_grab(
+                str(self.cfg.get("hotkey") or "pause"),
+                self._on_press,
+                self._on_release,
+            )
         self.backend.call_later(LOAD_POLL_MS, self._watch_load)
         log("starting")
         self.backend.run()
@@ -278,6 +286,7 @@ class FlowApp:
         self.backend.overlay_set_text("")
         self.backend.overlay_set_status("listening", 0.2)
         self.backend.overlay_show()
+        self._set_cancel_keys(True)
         self._sound("start")
         self._cancel("_level_src")
         self._level_src = self.backend.call_later(LEVEL_MS, self._pump_level)
@@ -361,12 +370,13 @@ class FlowApp:
         self.handsfree = False
         self.state = "transcribing"
         self._stop_stream_flag()
+        self._set_cancel_keys(False)
         try:
             audio = self.recorder.stop()
         except Exception as e:
             log(f"recorder stop: {e}")
             audio = np.zeros(0, dtype=np.float32)
-        self.backend.overlay_set_text("")
+        # Keep the streamed preview on screen while transcribing/cleaning.
         self.backend.overlay_set_status("transcribing")
         threading.Thread(
             target=self._process,
@@ -409,6 +419,7 @@ class FlowApp:
             if not raw:
                 self._ui(self._hide)
                 return
+            self._ui(self.backend.overlay_set_text, raw)
             self._ui(self._enter_cleaning)
             text = self.engine.rewrite(raw, terminal)
             log(f"clean: {text!r}")
@@ -417,6 +428,7 @@ class FlowApp:
                 return
             self.backend.paste_text(text, int(self.cfg.get("restore_clipboard_ms", 450)))
             self._sound("done")
+            self._ui(self.backend.overlay_set_text, text)
             self._ui(self.backend.overlay_set_status, "done")
             self._ui_later(DONE_HIDE_MS, self._hide)
         except Exception:
@@ -432,6 +444,7 @@ class FlowApp:
     def _hide(self) -> bool:
         self.state = "idle"
         self.handsfree = False
+        self._set_cancel_keys(False)
         try:
             self.backend.overlay_hide()
         except Exception:
@@ -464,7 +477,7 @@ class FlowApp:
             self._stream_thread = None
 
     def _stream_loop(self) -> None:
-        interval = float(self.cfg.get("stream_interval_s", 1.0))
+        interval = float(self.cfg.get("stream_interval_s", 0.7))
         sr = int(self.cfg["sample_rate"])
         vocab = load_vocabulary()
         tail_n = max(1, int(STREAM_TAIL_S * sr))
@@ -533,6 +546,36 @@ class FlowApp:
     def _push_stream_text(self, text: str) -> None:
         if self.state == "listening" and text:
             self.backend.overlay_set_text(text)
+
+    def _set_cancel_keys(self, active: bool) -> None:
+        fn = getattr(self.backend, "hotkey_set_cancel", None)
+        if fn is not None:
+            try:
+                fn(active)
+            except Exception as e:
+                log(f"cancel keys: {e}")
+
+    def cancel_recording(self) -> bool:
+        """Escape or End pressed while recording: throw the audio away."""
+        if self.state not in ("armed", "listening", "handsfree_stop"):
+            return False
+        self._stop_stream_flag()
+        self._cancel("_max_src")
+        self._cancel("_hf_src")
+        self._cancel("_level_src")
+        self._cancel("_commit_handle")
+        self.handsfree = False
+        self._set_cancel_keys(False)
+        try:
+            self.recorder.stop()
+        except Exception:
+            pass
+        self.state = "idle"
+        self.backend.overlay_set_text("")
+        self.backend.overlay_set_status("cancelled")
+        self._sound("error")
+        self._ui_later(600, self._hide)
+        return False
 
     def _sound(self, kind: str) -> None:
         if not self.cfg.get("sounds", True):

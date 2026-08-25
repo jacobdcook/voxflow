@@ -58,7 +58,7 @@ DEFAULTS = {
     "sounds": True,
     "sound_volume": 0.3,
     "restore_clipboard_ms": 450,
-    "stream_interval_s": 1.0,
+    "stream_interval_s": 0.7,
 }
 
 # key -> (python type, minimum, maximum). Values outside the range are clamped;

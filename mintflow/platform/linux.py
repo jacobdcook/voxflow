@@ -116,6 +116,7 @@ STATUS_LABELS = {
     "cleaning": "Cleaning up",
     "done": "Done",
     "error": "Try again",
+    "cancelled": "Cancelled",
     "loading": "Loading",
 }
 
@@ -240,7 +241,12 @@ class Overlay(Gtk.Window):
             log(f"overlay realize: {e}")
 
     def _expanded(self) -> bool:
-        return bool(self._text.strip()) and self.status == "listening"
+        return bool(self._text.strip()) and self.status in (
+            "listening",
+            "transcribing",
+            "cleaning",
+            "done",
+        )
 
     def _measure_text_h(self, text: str) -> int:
         layout = self.create_pango_layout(text)
@@ -347,6 +353,8 @@ class Overlay(Gtk.Window):
             return (0.553, 0.922, 0.624, 0.95)  # #8DEB9F
         if self.status == "error":
             return (1.0, 0.451, 0.451, 0.95)  # #FF7373
+        if self.status == "cancelled":
+            return (0.7, 0.7, 0.7, 0.9)
         return (1.0, 1.0, 1.0, 0.88)
 
     def _on_draw(self, _widget, cr) -> bool:
@@ -396,7 +404,8 @@ class Overlay(Gtk.Window):
         layout.set_font_description(Pango.FontDescription("Noto Sans 13"))
         layout.set_width(TEXT_MAX_W * Pango.SCALE)
         layout.set_wrap(Pango.WrapMode.WORD_CHAR)
-        layout.set_text(self._text, -1)
+        shown = self._text + " ▍" if self.status == "listening" else self._text
+        layout.set_text(shown, -1)
         _pw, ph = layout.get_pixel_size()
         max_h = TEXT_MAX_LINES * TEXT_LINE_H + 4
         text_x, text_y = 20, HEADER_H + 4
@@ -541,6 +550,7 @@ class HotkeyGrabber(threading.Thread):
         self.on_commit = on_commit
         self.on_end = on_end or on_release
         self.on_tap = on_tap or on_release
+        self.on_cancel = None
         self.tap_ms = tap_ms
         self.repeat_ms = repeat_ms
         self._stop = threading.Event()
@@ -554,6 +564,15 @@ class HotkeyGrabber(threading.Thread):
         self._committed = False
         self._stop_timer: threading.Timer | None = None
         self._commit_timer: threading.Timer | None = None
+        # Cancel keys (Escape / End) are grabbed only while a recording is live.
+        self.cancel_keycodes: set[int] = set()
+        for name in ("Escape", "End"):
+            ks = XK.string_to_keysym(name)
+            kc = self.dpy.keysym_to_keycode(ks) if ks else 0
+            if kc:
+                self.cancel_keycodes.add(kc)
+        self._cancel_want = False
+        self._cancel_grabbed = False
 
     def _keycode(self, name: str) -> int:
         if name.startswith("keycode:"):
@@ -621,6 +640,14 @@ class HotkeyGrabber(threading.Thread):
         except Exception:
             pass
         try:
+            if self._cancel_grabbed:
+                for kc in self.cancel_keycodes:
+                    for m in EXTRA_MASKS:
+                        self.root.ungrab_key(kc, m)
+                self._cancel_grabbed = False
+        except Exception:
+            pass
+        try:
             self.dpy.flush()
         except Exception:
             pass
@@ -656,16 +683,47 @@ class HotkeyGrabber(threading.Thread):
         else:
             _schedule(self.on_tap)
 
+    def set_cancel_armed(self, active: bool) -> None:
+        """Thread-safe request; the grabber thread applies it on its next tick."""
+        self._cancel_want = bool(active)
+
+    def _sync_cancel_grab(self) -> None:
+        if self._cancel_want == self._cancel_grabbed:
+            return
+        try:
+            if self._cancel_want:
+                for kc in self.cancel_keycodes:
+                    for m in EXTRA_MASKS:
+                        self.root.grab_key(kc, m, True, X.GrabModeAsync, X.GrabModeAsync)
+            else:
+                for kc in self.cancel_keycodes:
+                    for m in EXTRA_MASKS:
+                        self.root.ungrab_key(kc, m)
+            self.dpy.flush()
+            self._cancel_grabbed = self._cancel_want
+        except Exception as e:
+            log(f"cancel grab: {e}")
+            self._cancel_grabbed = self._cancel_want
+
     def run(self) -> None:
         self.grab()
         self.root.change_attributes(event_mask=X.KeyPressMask | X.KeyReleaseMask)
         while not self._stop.is_set():
+            self._sync_cancel_grab()
             if self.dpy.pending_events() == 0:
                 time.sleep(0.008)
                 continue
             ev = self.dpy.next_event()
             if ev.type == X.MappingNotify:
                 self.dpy.refresh_keyboard_mapping(ev)
+                continue
+            if (
+                ev.type == X.KeyPress
+                and self._cancel_grabbed
+                and getattr(ev, "detail", None) in self.cancel_keycodes
+            ):
+                if self.on_cancel:
+                    _schedule(self.on_cancel)
                 continue
             if ev.type == X.KeyPress and getattr(ev, "detail", None) == self.keycode:
                 self._cancel_stop_timer()
@@ -834,7 +892,7 @@ class LinuxBackend:
     def overlay_place(self) -> None:
         self._overlay.place_on_pointer_monitor()
 
-    def hotkey_grab(self, spec, on_press, on_release) -> None:
+    def hotkey_grab(self, spec, on_press, on_release, on_cancel=None) -> None:
         self.hotkey_ungrab()
         tap_ms = int(self.cfg.get("tap_ms", 220))
         repeat_ms = int(self.cfg.get("repeat_ms", 80))
@@ -845,7 +903,12 @@ class LinuxBackend:
             tap_ms=tap_ms,
             repeat_ms=repeat_ms,
         )
+        self._grabber.on_cancel = on_cancel
         self._grabber.start()
+
+    def hotkey_set_cancel(self, active: bool) -> None:
+        if self._grabber is not None:
+            self._grabber.set_cancel_armed(active)
 
     def hotkey_ungrab(self) -> None:
         if self._grabber is None:
