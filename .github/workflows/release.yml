@@ -9,9 +9,19 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    name: Build and publish GitHub Release
-    runs-on: ubuntu-latest
+  build:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux
+          - os: macos-latest
+            label: macos
+          - os: windows-latest
+            label: win
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,65 +31,147 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Build sdist and wheel
+      - name: Linux system deps
+        if: matrix.label == 'linux'
         run: |
+          sudo apt-get update
+          sudo apt-get install -y libgirepository1.0-dev gir1.2-gtk-3.0 libcairo2-dev libportaudio2 portaudio19-dev
+
+      - name: macOS system deps
+        if: matrix.label == 'macos'
+        run: |
+          brew install portaudio || true
+
+      - name: Install package and build deps
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install .
+          if [ "${{ matrix.label }}" = "linux" ]; then
+            pip install python-xlib "PyGObject==3.48.2" pycairo
+          else
+            pip install pynput pyperclip
+          fi
+
+      - name: Build bundle
+        shell: bash
+        run: |
+          python -m PyInstaller --noconfirm --onedir --name mintflow \
+            --collect-all faster_whisper \
+            --collect-all ctranslate2 \
+            --hidden-import sounddevice \
+            --hidden-import httpx \
+            --collect-submodules mintflow \
+            --exclude-module matplotlib \
+            --exclude-module PIL \
+            --exclude-module pandas \
+            --exclude-module scipy \
+            --exclude-module IPython \
+            --exclude-module torch \
+            --exclude-module triton \
+            --exclude-module cv2 \
+            --exclude-module yt_dlp \
+            packaging/launcher.py
+
+      - name: Trim bundle (linux)
+        if: matrix.label == 'linux'
+        run: |
+          rm -rf dist/mintflow/_internal/share/icons \
+                 dist/mintflow/_internal/share/themes \
+                 dist/mintflow/_internal/share/locale \
+                 dist/mintflow/_internal/share/doc \
+                 dist/mintflow/_internal/share/man || true
+          du -sh dist/mintflow
+
+      - name: Zip (unix)
+        if: matrix.label != 'win'
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          cd dist
+          zip -qr "mintflow-${VERSION}-${{ matrix.label }}.zip" mintflow
+          ls -la *.zip
+
+      - name: Zip (windows)
+        if: matrix.label == 'win'
+        shell: pwsh
+        run: |
+          $version = "${env:GITHUB_REF_NAME}"
+          Compress-Archive -Path dist\mintflow -DestinationPath "dist\mintflow-$version-win.zip"
+          Get-ChildItem dist\*.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mintflow-${{ matrix.label }}
+          path: dist/mintflow-*.zip
+          if-no-files-found: error
+
+  wheel:
+    name: Build wheel and sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
           python -m pip install --upgrade pip build
           python -m build
-          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mintflow-pydist
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+
+  release:
+    name: Publish GitHub Release
+    needs: [build, wheel]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
 
       - name: Write release notes
         run: |
-          cat > /tmp/release-notes.md <<'EOF'
+          VERSION="${GITHUB_REF_NAME}"
+          cat > /tmp/release-notes.md <<EOF
+          mintflow ${VERSION}
+
           Hold a key, speak, release. Cleaned text pastes into whatever app is focused.
+          Local-only: Whisper for speech-to-text, Ollama for cleanup. No cloud, no account, no word cap.
 
-          Local-only: Whisper for speech-to-text, Ollama/Qwen for cleanup. No cloud, no account.
+          See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md) for details.
 
-          ## Install
+          ## Download
 
-          **pip (Linux, macOS, Windows)**
+          | Platform | File |
+          |---|---|
+          | Linux | mintflow-${VERSION}-linux.zip |
+          | macOS | mintflow-${VERSION}-macos.zip |
+          | Windows | mintflow-${VERSION}-win.zip |
 
-          ```
+          Unzip, then run the \`mintflow\` executable inside (\`mintflow.exe\` on Windows).
+          First run: \`mintflow setup\` detects your hardware and lets you pick a hotkey.
+
+          For the best text cleanup also install [Ollama](https://ollama.com) and run:
+          \`ollama pull qwen2.5:7b\`
+
+          ## Or install with pip
+
+          \`\`\`
           pip install mintflow
           mintflow setup
-          ```
+          \`\`\`
 
-          On macOS and Windows also install desktop extras:
-
-          ```
-          pip install "mintflow[desktop]"
-          ```
-
-          On Linux:
-
-          ```
-          pip install "mintflow[linux]"
-          ```
-
-          **macOS**
-
-          ```
-          git clone https://github.com/jacobdcook/mintflow.git
-          cd mintflow
-          bash scripts/install-mac.sh
-          ```
-
-          **Windows (PowerShell)**
-
-          ```
-          git clone https://github.com/jacobdcook/mintflow.git
-          cd mintflow
-          powershell -ExecutionPolicy Bypass -File .\scripts\install-win.ps1
-          ```
-
-          **Linux**
-
-          ```
-          git clone https://github.com/jacobdcook/mintflow.git
-          cd mintflow
-          bash scripts/install-linux.sh
-          ```
-
-          Full instructions: https://github.com/jacobdcook/mintflow#readme
+          Full instructions: https://github.com/${GITHUB_REPOSITORY}#readme
 
           Audio and text stay on your computer. Nothing is sent to the cloud.
           EOF
@@ -88,6 +180,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" dist/*.whl dist/*.tar.gz \
+          gh release delete "${GITHUB_REF_NAME}" --yes --repo "${GITHUB_REPOSITORY}" 2>/dev/null || true
+          gh release create "${GITHUB_REF_NAME}" artifacts/*.zip artifacts/*.whl artifacts/*.tar.gz \
+            --repo "${GITHUB_REPOSITORY}" \
             --title "mintflow ${GITHUB_REF_NAME}" \
             --notes-file /tmp/release-notes.md
