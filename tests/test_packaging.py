@@ -27,15 +27,15 @@ if tomllib:
     check("project metadata parses", bool(proj.get("name") and proj.get("version")))
     check(
         "console script points at cli:main",
-        proj["scripts"]["mintflow"] == "mintflow.cli:main",
+        proj["scripts"]["voxflow"] == "voxflow.cli:main",
         proj["scripts"],
     )
-    import mintflow
+    import voxflow
 
     check(
         "pyproject version matches package __version__",
-        proj["version"] == mintflow.__version__,
-        f"{proj['version']} vs {mintflow.__version__}",
+        proj["version"] == voxflow.__version__,
+        f"{proj['version']} vs {voxflow.__version__}",
     )
     deps = " ".join(proj["dependencies"])
     for need in ("numpy", "sounddevice", "faster-whisper", "httpx"):
@@ -48,27 +48,27 @@ from setuptools import setup
 
 sys.argv = ["setup.py", "--quiet", "egg_info", "--egg-base", tempfile.mkdtemp()]
 dist = setup(
-    name="mintflow",
-    packages=__import__("setuptools").find_packages(where=".", include=["mintflow*"]),
+    name="voxflow",
+    packages=__import__("setuptools").find_packages(where=".", include=["voxflow*"]),
     script_args=sys.argv[1:],
 )
 pkgs = set(dist.packages or [])
 check(
-    "packages are exactly the mintflow tree",
-    pkgs == {"mintflow", "mintflow.platform"},
+    "packages are exactly the voxflow tree",
+    pkgs == {"voxflow", "voxflow.platform"},
     sorted(pkgs),
 )
 check(
-    "the v0 prototype is not importable as a top level module named mintflow",
-    __import__("mintflow").__file__.endswith("mintflow/__init__.py"),
-    __import__("mintflow").__file__,
+    "the v0 prototype is not importable as a top level module named voxflow",
+    __import__("voxflow").__file__.endswith("voxflow/__init__.py"),
+    __import__("voxflow").__file__,
 )
 
 # every module must import without a display or optional desktop deps
 import importlib
 
-for mod in ("mintflow.config", "mintflow.gpu", "mintflow.cleanup", "mintflow.audio",
-            "mintflow.engine", "mintflow.app", "mintflow.cli", "mintflow.platform"):
+for mod in ("voxflow.config", "voxflow.gpu", "voxflow.cleanup", "voxflow.audio",
+            "voxflow.engine", "voxflow.app", "voxflow.cli", "voxflow.platform"):
     try:
         importlib.import_module(mod)
         ok, why = True, ""

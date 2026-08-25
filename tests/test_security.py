@@ -16,7 +16,7 @@ def check(name, cond, detail=""):
 
 # --- 1. no subprocess call may use shell=True, and none may take an f-string /
 #        concatenation as the whole command (that is the shell-injection shape).
-ROOT = pathlib.Path(__file__).resolve().parent.parent / "mintflow"
+ROOT = pathlib.Path(__file__).resolve().parent.parent / "voxflow"
 shell_true = []
 str_cmd = []
 for path in sorted(ROOT.rglob("*.py")):
@@ -44,7 +44,7 @@ check("no subprocess shell=True", not shell_true, shell_true)
 check("every subprocess command is an argv list", not str_cmd, str_cmd)
 
 # --- 2. notify() must not let transcript text break out of the osascript string
-import mintflow.app as A
+import voxflow.app as A
 
 calls = []
 
@@ -71,7 +71,7 @@ A.notify(EVIL)
 check("notify-send passes text as its own argv entry", calls[-1][-1] == EVIL, calls[-1])
 
 # --- 3. clipboard restore must not clobber a newer copy
-import mintflow.platform.linux as LX
+import voxflow.platform.linux as LX
 
 STATE = {"clip": b"ORIGINAL"}
 LX.clipboard_get = lambda: STATE["clip"]
@@ -116,7 +116,7 @@ check(
 )
 
 # --- 4. config warns when transcripts would leave the machine
-from mintflow.config import _is_local_url
+from voxflow.config import _is_local_url
 
 check("localhost is local", _is_local_url("http://127.0.0.1:11434"))
 check("::1 is local", _is_local_url("http://[::1]:11434"))

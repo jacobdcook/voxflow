@@ -1,4 +1,4 @@
-"""mintflow command-line entry point."""
+"""voxflow command-line entry point."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import sys
 import time
 from pathlib import Path
 
-from mintflow.config import (
+from voxflow.config import (
     CONFIG_PATH,
     PID_PATH,
     VOCAB_PATH,
@@ -19,20 +19,20 @@ from mintflow.config import (
     load_vocabulary,
     log,
 )
-from mintflow.platform import BackendUnavailable
+from voxflow.platform import BackendUnavailable
 
-HELP = """mintflow: hold a key, speak, release. Cleaned text pastes into the focused app.
-  mintflow              start daemon
-  mintflow run          start daemon
-  mintflow quit         stop daemon
-  mintflow stop         stop daemon
-  mintflow setup        detect GPU, set hotkey, pull Ollama model
-  mintflow set-hotkey   press a key, it becomes the hotkey
-  mintflow test-mic     record 2.5s and transcribe
-  mintflow test-inject  paste a test string
-  mintflow demo         show overlay animation
-  mintflow models       print GPU detection and recommended model
-  mintflow help         this message
+HELP = """voxflow: hold a key, speak, release. Cleaned text pastes into the focused app.
+  voxflow              start daemon
+  voxflow run          start daemon
+  voxflow quit         stop daemon
+  voxflow stop         stop daemon
+  voxflow setup        detect GPU, set hotkey, pull Ollama model
+  voxflow set-hotkey   press a key, it becomes the hotkey
+  voxflow test-mic     record 2.5s and transcribe
+  voxflow test-inject  paste a test string
+  voxflow demo         show overlay animation
+  voxflow models       print GPU detection and recommended model
+  voxflow help         this message
   config: {config}
   vocabulary: {vocab} (one name/term per line)
 """
@@ -69,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
         return 130
     except BackendUnavailable as e:
         # Missing desktop dependency. Say what to install, not where we crashed.
-        print(f"mintflow cannot start:\n{e}", file=sys.stderr)
+        print(f"voxflow cannot start:\n{e}", file=sys.stderr)
         return 1
 
 
@@ -84,7 +84,7 @@ def cmd_help() -> int:
 def cmd_quit() -> int:
     pid = already_running()
     if not pid:
-        print("mintflow is not running")
+        print("voxflow is not running")
         return 0
     if not _kill_pid(pid):
         print(f"could not stop pid {pid}", file=sys.stderr)
@@ -95,7 +95,7 @@ def cmd_quit() -> int:
 
 
 def cmd_models() -> int:
-    from mintflow.gpu import detect_gpu, recommend_model
+    from voxflow.gpu import detect_gpu, recommend_model
 
     cfg = load_config()
     gpu = detect_gpu()
@@ -114,7 +114,7 @@ def cmd_models() -> int:
 
 
 def cmd_setup() -> int:
-    from mintflow.gpu import detect_gpu, recommend_model, setup_auto_config
+    from voxflow.gpu import detect_gpu, recommend_model, setup_auto_config
 
     cfg = load_config()
     print("Detecting hardware...")
@@ -152,7 +152,7 @@ def cmd_set_hotkey(stop_daemon: bool = True, timeout_s: float = 15) -> int:
     if not captured or "spec" not in captured:
         print("no key captured")
         return 1
-    from mintflow.app import apply_captured_hotkey
+    from voxflow.app import apply_captured_hotkey
 
     apply_captured_hotkey(cfg, captured)
     label = captured.get("label") or captured["spec"]
@@ -163,8 +163,8 @@ def cmd_set_hotkey(stop_daemon: bool = True, timeout_s: float = 15) -> int:
 def cmd_test_mic() -> int:
     import numpy as np
 
-    from mintflow.audio import Recorder
-    from mintflow.engine import Engine
+    from voxflow.audio import Recorder
+    from voxflow.engine import Engine
 
     cfg = _resolved_cfg()
     print("Recording for 2.5 seconds. Say a full sentence now...")
@@ -233,7 +233,7 @@ def cmd_test_inject() -> int:
     try:
         backend = _make_backend(cfg)
         backend.paste_text(
-            "mintflow paste test. If you can see this, injection works.",
+            "voxflow paste test. If you can see this, injection works.",
             int(cfg.get("restore_clipboard_ms", 450)),
         )
     except BackendUnavailable:
@@ -276,24 +276,24 @@ def cmd_demo() -> int:
 def cmd_run() -> int:
     cfg = load_config()
     if str(cfg.get("model", "auto")).lower() == "auto":
-        print("First run: configuring mintflow...")
+        print("First run: configuring voxflow...")
         cmd_setup()
         cfg = load_config()
     else:
-        from mintflow.gpu import setup_auto_config
+        from voxflow.gpu import setup_auto_config
 
         cfg = setup_auto_config(cfg)
 
     running = already_running()
     if running:
-        from mintflow.app import notify
+        from voxflow.app import notify
 
-        notify(f"mintflow is already running (pid {running})")
+        notify(f"voxflow is already running (pid {running})")
         return 0
 
     write_pid()
     load_vocabulary()
-    from mintflow.app import FlowApp
+    from voxflow.app import FlowApp
 
     app = FlowApp(cfg)
 
@@ -314,13 +314,13 @@ def cmd_run() -> int:
 
 
 def _resolved_cfg() -> dict:
-    from mintflow.gpu import setup_auto_config
+    from voxflow.gpu import setup_auto_config
 
     return setup_auto_config(load_config())
 
 
 def _make_backend(cfg: dict):
-    from mintflow.platform import get_backend
+    from voxflow.platform import get_backend
 
     backend = get_backend()
     backend.cfg = cfg
@@ -374,7 +374,7 @@ def already_running() -> int | None:
     if not _pid_alive(pid):
         _clear_pid()
         return None
-    if not _pid_is_mintflow(pid):
+    if not _pid_is_voxflow(pid):
         _clear_pid()
         return None
     return pid
@@ -423,11 +423,11 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
-def _pid_is_mintflow(pid: int) -> bool:
+def _pid_is_voxflow(pid: int) -> bool:
     if sys.platform.startswith("linux"):
         try:
             cmd = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\x00", b" ").decode()
-            return "mintflow" in cmd
+            return "voxflow" in cmd
         except OSError:
             return False
     if sys.platform == "win32":
@@ -440,7 +440,7 @@ def _pid_is_mintflow(pid: int) -> bool:
                 check=False,
             )
             line = (out.stdout or "").lower()
-            return "python" in line or "mintflow" in line
+            return "python" in line or "voxflow" in line
         except Exception:
             return True
     try:
@@ -451,7 +451,7 @@ def _pid_is_mintflow(pid: int) -> bool:
             timeout=3,
             check=False,
         )
-        return "mintflow" in (out.stdout or "")
+        return "voxflow" in (out.stdout or "")
     except Exception:
         return True
 

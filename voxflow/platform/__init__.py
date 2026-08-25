@@ -35,7 +35,7 @@ def get_backend():
 
         return WindowsBackend()
     raise BackendUnavailable(
-        f"mintflow does not support {sys.platform} yet. It runs on Linux (X11), "
+        f"voxflow does not support {sys.platform} yet. It runs on Linux (X11), "
         "macOS, and Windows."
     )
 

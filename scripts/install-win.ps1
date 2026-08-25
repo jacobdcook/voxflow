@@ -1,4 +1,4 @@
-# mintflow Windows installer (winget, with Chocolatey fallback).
+# voxflow Windows installer (winget, with Chocolatey fallback).
 # Run from PowerShell:
 #   powershell -ExecutionPolicy Bypass -File .\scripts\install-win.ps1
 
@@ -6,8 +6,8 @@ $ErrorActionPreference = "Stop"
 $OllamaModel = if ($env:OLLAMA_MODEL) { $env:OLLAMA_MODEL } else { "qwen2.5:7b" }
 $Root = Split-Path -Parent $PSScriptRoot
 if (-not $Root) { $Root = (Get-Location).Path }
-$Venv = Join-Path $env:LOCALAPPDATA "mintflow\venv"
-$ShimDir = Join-Path $env:LOCALAPPDATA "mintflow\bin"
+$Venv = Join-Path $env:LOCALAPPDATA "voxflow\venv"
+$ShimDir = Join-Path $env:LOCALAPPDATA "voxflow\bin"
 $StartupDir = [Environment]::GetFolderPath("Startup")
 
 function Write-Info([string]$Message) { Write-Host "`n==> $Message" }
@@ -62,7 +62,7 @@ function Refresh-SessionPath {
         "$env:LOCALAPPDATA\Programs\Python\Python311\Scripts",
         "$env:LOCALAPPDATA\Programs\Ollama",
         "C:\Program Files\Ollama",
-        "$env:LOCALAPPDATA\mintflow\bin"
+        "$env:LOCALAPPDATA\voxflow\bin"
     )
     foreach ($g in $guesses) {
         if (Test-Path $g) { $env:Path = "$g;$env:Path" }
@@ -102,7 +102,7 @@ if (-not $Py) {
 }
 Write-Ok "$Py $(Get-PythonVersion $Py)"
 
-Write-Info "Installing mintflow"
+Write-Info "Installing voxflow"
 New-Item -ItemType Directory -Force -Path $Venv, $ShimDir | Out-Null
 if (-not (Test-Path (Join-Path $Venv "Scripts\python.exe"))) {
     & $Py -m venv $Venv
@@ -114,18 +114,18 @@ if (Test-Path $PyProject) {
     & $VenvPy -m pip install ($Root + '[desktop]')
     Write-Ok "installed from this repo"
 } else {
-    & $VenvPy -m pip install ('mintflow' + '[desktop]')
+    & $VenvPy -m pip install ('voxflow' + '[desktop]')
     Write-Ok "installed from PyPI"
 }
 
-$MintflowExe = Join-Path $Venv "Scripts\mintflow.exe"
-$Shim = Join-Path $ShimDir "mintflow.cmd"
+$VoxflowExe = Join-Path $Venv "Scripts\voxflow.exe"
+$Shim = Join-Path $ShimDir "voxflow.cmd"
 @(
     "@echo off",
-    "`"$MintflowExe`" %*"
+    "`"$VoxflowExe`" %*"
 ) | Set-Content -Path $Shim -Encoding ASCII
 Add-UserPath $ShimDir
-Write-Ok "mintflow -> $Shim"
+Write-Ok "voxflow -> $Shim"
 
 Write-Info "Checking Ollama"
 Refresh-SessionPath
@@ -160,35 +160,35 @@ if (Test-Cmd "ollama") {
 }
 
 Write-Info "First-run setup (GPU detect + hotkey)"
-& $MintflowExe setup
+& $VoxflowExe setup
 if ($LASTEXITCODE -ne 0) {
-    Write-Warn "setup did not finish. Later run: mintflow setup"
+    Write-Warn "setup did not finish. Later run: voxflow setup"
 }
 
 Write-Info "Setting up Start Menu autostart"
-$StartupBat = Join-Path $StartupDir "mintflow.bat"
+$StartupBat = Join-Path $StartupDir "voxflow.bat"
 $Pythonw = Join-Path $Venv "Scripts\pythonw.exe"
 if (Test-Path $Pythonw) {
     @"
 @echo off
-start "" "$Pythonw" -m mintflow
+start "" "$Pythonw" -m voxflow
 "@ | Set-Content -Path $StartupBat -Encoding ASCII
 } else {
     @"
 @echo off
-start "" "$MintflowExe"
+start "" "$VoxflowExe"
 "@ | Set-Content -Path $StartupBat -Encoding ASCII
 }
 Write-Ok "startup shortcut -> $StartupBat"
 
 try {
-    Start-Process -FilePath $MintflowExe -WindowStyle Hidden
+    Start-Process -FilePath $VoxflowExe -WindowStyle Hidden
 } catch {
-    Write-Warn "Could not start mintflow now. Run mintflow from a new PowerShell window."
+    Write-Warn "Could not start voxflow now. Run voxflow from a new PowerShell window."
 }
 
 $Key = "Pause"
-$Cfg = Join-Path $env:APPDATA "mintflow\config.json"
+$Cfg = Join-Path $env:APPDATA "voxflow\config.json"
 if (Test-Path $Cfg) {
     try {
         $json = Get-Content -Raw -Path $Cfg | ConvertFrom-Json
@@ -199,5 +199,5 @@ if (Test-Path $Cfg) {
 
 Write-Host ""
 Write-Host "Ready! Press $Key to talk."
-Write-Host "Stop later with: mintflow quit"
-Write-Host "If mintflow is not found, close this window and open a new PowerShell."
+Write-Host "Stop later with: voxflow quit"
+Write-Host "If voxflow is not found, close this window and open a new PowerShell."

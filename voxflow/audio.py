@@ -7,7 +7,7 @@ import threading
 import numpy as np
 import sounddevice as sd
 
-from mintflow.config import log
+from voxflow.config import log
 
 
 class Recorder:

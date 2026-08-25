@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 ###############################################################################
-# auto_build_mintflow.sh — Build mintflow cross-platform package
+# auto_build_voxflow.sh — Build voxflow cross-platform package
 #
 # Pipeline:
 #   Cursor/Grok 4.6  →  build phases A-G  →  push
@@ -9,16 +9,16 @@
 #   Fable (if needed)→  audit + fix (J)   →  push + tag + release
 #
 # Usage:
-#   cd /home/z1337/Desktop/PROJECTS/mintflow
-#   bash auto_build_mintflow.sh
-#   bash auto_build_mintflow.sh --list
-#   bash auto_build_mintflow.sh --from D
-#   CURSOR_MODEL=cursor-grok-4.6-high-fast bash auto_build_mintflow.sh
+#   cd /home/z1337/Desktop/PROJECTS/voxflow
+#   bash auto_build_voxflow.sh
+#   bash auto_build_voxflow.sh --list
+#   bash auto_build_voxflow.sh --from D
+#   CURSOR_MODEL=cursor-grok-4.6-high-fast bash auto_build_voxflow.sh
 ###############################################################################
 
 set -euo pipefail
 
-PROJECT="/home/z1337/Desktop/PROJECTS/mintflow"
+PROJECT="/home/z1337/Desktop/PROJECTS/voxflow"
 PLAN="$PROJECT/PLAN.md"
 STATE="$PROJECT/.auto_build_state.json"
 LOG="$PROJECT/logs/auto_build_$(date +%Y%m%d_%H%M%S).log"
@@ -31,7 +31,7 @@ FABLE_MODEL="${FABLE_MODEL:-claude-fable-5-thinking-xhigh}" # Cursor agent for F
 
 COOLDOWN_SEC="${COOLDOWN_SEC:-20}"
 GITHUB_USER="jacobdcook"
-REPO_NAME="mintflow"
+REPO_NAME="voxflow"
 
 mkdir -p "$PROJECT/logs"
 
@@ -85,7 +85,7 @@ run_cursor() {
         attempt=$((attempt + 1))
         log "${YELLOW}[$label]${NC} Attempt $attempt — Cursor agent (model=$model)"
 
-        local session_log="$PROJECT/logs/mintflow_${label}_$(date +%H%M%S).log"
+        local session_log="$PROJECT/logs/voxflow_${label}_$(date +%H%M%S).log"
         local ok_flag=0
 
         if ! command -v agent >/dev/null 2>&1; then
@@ -154,7 +154,7 @@ run_claude() {
         attempt=$((attempt + 1))
         log "${YELLOW}[$label]${NC} Attempt $attempt — Claude Code ${model:+(model=$model)}"
 
-        local session_log="$PROJECT/logs/mintflow_${label}_claude_$(date +%H%M%S).log"
+        local session_log="$PROJECT/logs/voxflow_${label}_claude_$(date +%H%M%S).log"
         local ok_flag=0
 
         set +e
@@ -208,7 +208,7 @@ logs/
 .env
 *.wav
 *.mp3
-mintflow_v0.py
+voxflow_v0.py
 GITEOF
         git add .gitignore
         git -c core.hooksPath=/tmp/nohooks commit -m "Initial commit"
@@ -253,13 +253,13 @@ wrap_prompt() {
     local title="$2"
     local body="$3"
     cat <<PROMPT_EOF
-You are building mintflow — a cross-platform, open-source voice-to-text tool (like Wispr Flow).
+You are building voxflow — a cross-platform, open-source voice-to-text tool (like Wispr Flow).
 Hold a key, speak, release. Cleaned text pastes into whatever app is focused.
 Runs locally: Whisper for STT, Ollama/Qwen for text cleanup. No cloud, no account.
 
 Project: $PROJECT
 Full spec: $PROJECT/PLAN.md — READ THIS FIRST. It has the complete architecture, module specs, overlay design, and critical implementation notes.
-Reference: $PROJECT/mintflow_v0.py — the working Linux prototype. Port logic from here.
+Reference: $PROJECT/voxflow_v0.py — the working Linux prototype. Port logic from here.
 
 === Phase $letter: $title ===
 
@@ -267,7 +267,7 @@ $body
 
 === Rules ===
 - Read PLAN.md first. It answers most architecture questions.
-- Reference mintflow_v0.py for proven Linux code to port.
+- Reference voxflow_v0.py for proven Linux code to port.
 - No Co-authored-by or AI attribution in commits.
 - Stage only files you changed: git add <specific files>
 - Commit: git -c core.hooksPath=/tmp/nohooks commit -m "$title"
@@ -283,29 +283,29 @@ PROMPT_EOF
 
 BODY_A='Create the package foundation. Files to create:
 
-1. pyproject.toml — name mintflow, version 1.0.0, Python >=3.10, deps (numpy, sounddevice, faster-whisper, httpx), optional-deps for linux (python-xlib) and desktop (pynput, pyperclip). Entry point: mintflow = mintflow.cli:main. Include project metadata: description, license MIT, author Jacob Cook, repo URL https://github.com/jacobdcook/mintflow, classifiers, keywords.
+1. pyproject.toml — name voxflow, version 1.0.0, Python >=3.10, deps (numpy, sounddevice, faster-whisper, httpx), optional-deps for linux (python-xlib) and desktop (pynput, pyperclip). Entry point: voxflow = voxflow.cli:main. Include project metadata: description, license MIT, author Jacob Cook, repo URL https://github.com/jacobdcook/voxflow, classifiers, keywords.
 
 2. LICENSE — MIT license, copyright 2024 Jacob Cook.
 
-3. mintflow/__init__.py — just __version__ = "1.0.0"
+3. voxflow/__init__.py — just __version__ = "1.0.0"
 
-4. mintflow/__main__.py — from mintflow.cli import main; main()
+4. voxflow/__main__.py — from voxflow.cli import main; main()
 
-5. mintflow/config.py — See PLAN.md config.py section. Platform-aware paths (Linux ~/.config/mintflow, macOS ~/Library/Application Support/mintflow, Windows %APPDATA%/mintflow). Load/save JSON config. load_vocabulary(). STYLE_HINTS dict. JUNK_TRANSCRIPTS set. PID file path. log() function.
+5. voxflow/config.py — See PLAN.md config.py section. Platform-aware paths (Linux ~/.config/voxflow, macOS ~/Library/Application Support/voxflow, Windows %APPDATA%/voxflow). Load/save JSON config. load_vocabulary(). STYLE_HINTS dict. JUNK_TRANSCRIPTS set. PID file path. log() function.
 
-6. mintflow/gpu.py — See PLAN.md gpu.py section. detect_gpu(), recommend_model(), setup_auto_config(). RAM detection per platform (/proc/meminfo, sysctl, wmic).'
+6. voxflow/gpu.py — See PLAN.md gpu.py section. detect_gpu(), recommend_model(), setup_auto_config(). RAM detection per platform (/proc/meminfo, sysctl, wmic).'
 
 BODY_B='Create core engine modules. Files to create:
 
-1. mintflow/audio.py — Port Recorder class from mintflow_v0.py. Add get_snapshot() method (thread-safe copy of audio buffer without stopping recording). See PLAN.md audio.py section.
+1. voxflow/audio.py — Port Recorder class from voxflow_v0.py. Add get_snapshot() method (thread-safe copy of audio buffer without stopping recording). See PLAN.md audio.py section.
 
-2. mintflow/cleanup.py — Port and IMPROVE from mintflow_v0.py. CRITICAL: use /api/chat NOT /api/generate for Ollama. Include REWRITE_SYSTEM prompt, TERMINAL_ADDON, REWRITE_EXAMPLES (3 few-shot pairs), _sane_rewrite validator, local_cleanup fallback with all regex patterns (FILLERS, SPOKEN_PUNCT, SCRATCH, SELF_CORRECT). See PLAN.md cleanup.py section and critical notes.
+2. voxflow/cleanup.py — Port and IMPROVE from voxflow_v0.py. CRITICAL: use /api/chat NOT /api/generate for Ollama. Include REWRITE_SYSTEM prompt, TERMINAL_ADDON, REWRITE_EXAMPLES (3 few-shot pairs), _sane_rewrite validator, local_cleanup fallback with all regex patterns (FILLERS, SPOKEN_PUNCT, SCRATCH, SELF_CORRECT). See PLAN.md cleanup.py section and critical notes.
 
-3. mintflow/engine.py — Whisper engine. CUDA preload function from v0. Engine class with preload(), transcribe(fast=True for streaming / False for final), rewrite(). Hallucination filtering. See PLAN.md engine.py section.'
+3. voxflow/engine.py — Whisper engine. CUDA preload function from v0. Engine class with preload(), transcribe(fast=True for streaming / False for final), rewrite(). Hallucination filtering. See PLAN.md engine.py section.'
 
-BODY_C='Create the Linux platform backend. This is the biggest file — port from mintflow_v0.py.
+BODY_C='Create the Linux platform backend. This is the biggest file — port from voxflow_v0.py.
 
-File: mintflow/platform/linux.py
+File: voxflow/platform/linux.py
 
 Must implement the Backend interface from PLAN.md app.py section. Port:
 - HotkeyGrabber (Xlib X.GrabModeAsync, autorepeat debounce, tap vs hold)
@@ -317,13 +317,13 @@ Must implement the Backend interface from PLAN.md app.py section. Port:
 - Sound (paplay with freedesktop sounds)
 - Capture hotkey dialog (GTK3 window that captures keypress)
 
-Also create mintflow/platform/__init__.py — OS detection, get_backend() factory.
+Also create voxflow/platform/__init__.py — OS detection, get_backend() factory.
 
 This is the critical path — the Linux backend must work perfectly since we can test it on this machine.'
 
 BODY_D='Create the macOS platform backend.
 
-File: mintflow/platform/macos.py
+File: voxflow/platform/macos.py
 
 Implement same Backend interface as Linux. Uses:
 - pynput keyboard.Listener with suppress for hotkey (CGEventTap)
@@ -340,7 +340,7 @@ Read the Linux backend for reference on the state machine callbacks and overlay 
 
 BODY_E='Create the Windows platform backend.
 
-File: mintflow/platform/windows.py
+File: voxflow/platform/windows.py
 
 Implement same Backend interface. Uses:
 - pynput keyboard.Listener with suppress for hotkey
@@ -355,7 +355,7 @@ Read the macOS backend — Windows is very similar (both use pynput + tkinter). 
 
 BODY_F='Create the app orchestrator and CLI. These tie everything together.
 
-1. mintflow/app.py — FlowApp class. Platform-agnostic state machine. See PLAN.md app.py section.
+1. voxflow/app.py — FlowApp class. Platform-agnostic state machine. See PLAN.md app.py section.
 States: idle, armed, listening, handsfree_stop, transcribing, cleaning.
 Key features:
 - Streaming transcription thread (runs during listening, calls get_snapshot + transcribe(fast=True) every stream_interval_s, pushes text to overlay)
@@ -364,9 +364,9 @@ Key features:
 - Tap-through for typing keys (replay the character)
 - Terminal detection before cleanup (changes cleanup behavior)
 
-2. mintflow/cli.py — main() entry point. Subcommands: run (default), quit/stop, setup, set-hotkey, test-mic, test-inject, demo, models, help. PID file management. Signal handlers. First-run detection (if config has "auto" for model, run setup).
+2. voxflow/cli.py — main() entry point. Subcommands: run (default), quit/stop, setup, set-hotkey, test-mic, test-inject, demo, models, help. PID file management. Signal handlers. First-run detection (if config has "auto" for model, run setup).
 
-Read mintflow_v0.py for the proven state machine logic. The app.py should be a clean extraction that delegates all platform calls to the Backend interface.'
+Read voxflow_v0.py for the proven state machine logic. The app.py should be a clean extraction that delegates all platform calls to the Backend interface.'
 
 BODY_G='Create documentation and release infrastructure. Make this look like a real product.
 
@@ -379,7 +379,7 @@ BODY_G='Create documentation and release infrastructure. Make this look like a r
    - "Set your hotkey" section
    - "Settings" table
    - "Custom vocabulary" section
-   - "GPU & model" section (mintflow models command)
+   - "GPU & model" section (voxflow models command)
    - "Privacy" section (everything local, nothing leaves your machine)
    - Troubleshooting FAQ
    - Contributing section
@@ -393,9 +393,9 @@ BODY_G='Create documentation and release infrastructure. Make this look like a r
 
 Make the README polished. Use clean markdown, proper headings, code blocks with language tags. This is the first thing people see.'
 
-BODY_H='AUDIT PHASE (Opus 4.6). You are auditing the mintflow cross-platform package.
+BODY_H='AUDIT PHASE (Opus 4.6). You are auditing the voxflow cross-platform package.
 
-Read every file in the mintflow/ package directory. Check against PLAN.md spec.
+Read every file in the voxflow/ package directory. Check against PLAN.md spec.
 
 Fix these categories:
 1. BUGS — logic errors, race conditions, missing error handling, import errors
@@ -408,11 +408,11 @@ Fix these categories:
 8. PACKAGING — verify pyproject.toml entry points, dependencies complete
 
 Run py_compile on every .py file. Fix any syntax errors.
-Test on this Linux machine: pip install -e . && mintflow models && mintflow test-mic
+Test on this Linux machine: pip install -e . && voxflow models && voxflow test-mic
 
 Stage fixes, commit: git -c core.hooksPath=/tmp/nohooks commit -m "Opus 4.6 audit fixes"'
 
-BODY_I='AUDIT PHASE (Opus 4.8 / latest). Second-pass audit of mintflow.
+BODY_I='AUDIT PHASE (Opus 4.8 / latest). Second-pass audit of voxflow.
 
 Focus on what the first audit may have missed:
 1. EDGE CASES — empty audio, very long recordings (>5min), rapid tap sequences, hotkey while processing
@@ -422,14 +422,14 @@ Focus on what the first audit may have missed:
 5. PERFORMANCE — is streaming interval tuned right, does GPU detection cache results, unnecessary work in hot paths
 6. CONFIG MIGRATION — if user has old v0 config, does it load without crashing
 
-Run the full test: pip install -e . && mintflow models && mintflow demo && mintflow test-mic
+Run the full test: pip install -e . && voxflow models && voxflow demo && voxflow test-mic
 Fix, commit: git -c core.hooksPath=/tmp/nohooks commit -m "Second audit fixes"'
 
 BODY_J='FINAL AUDIT (Fable). Read the two previous audit commits to see what was fixed.
 
 Only run if previous audits found significant issues. If the code looks solid:
 - Run py_compile on all files
-- Run mintflow test-mic
+- Run voxflow test-mic
 - If everything passes, say LOOKS GOOD and exit 0 without committing
 
 If issues remain:
@@ -498,7 +498,7 @@ MODELS[J]="$FABLE_MODEL"
 print_board() {
     echo ""
     echo -e "${CYAN}╔══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║${NC}  ${BOLD}MINTFLOW BUILD QUEUE${NC}                        ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  ${BOLD}VOXFLOW BUILD QUEUE${NC}                        ${CYAN}║${NC}"
     echo -e "${CYAN}╠══════════════════════════════════════════════╣${NC}"
     local letter st runner
     for letter in "${PROMPTS[@]}"; do
@@ -527,7 +527,7 @@ do_release() {
 
     git tag -d v1.0.0 2>/dev/null || true
     git push origin :refs/tags/v1.0.0 2>&1 | tee -a "$LOG" || true
-    git tag -a v1.0.0 -m "mintflow v1.0.0 — cross-platform voice-to-text"
+    git tag -a v1.0.0 -m "voxflow v1.0.0 — cross-platform voice-to-text"
     git push origin v1.0.0 2>&1 | tee -a "$LOG"
 
     log "Tag pushed. Waiting for Release workflow..."
@@ -546,7 +546,7 @@ do_release() {
             warn "Release workflow failed. Creating release manually..."
             gh release create v1.0.0 \
                 --repo "$GITHUB_USER/$REPO_NAME" \
-                --title "mintflow v1.0.0" \
+                --title "voxflow v1.0.0" \
                 --notes "First cross-platform release. See README for install instructions." \
                 2>&1 | tee -a "$LOG" || true
             return 0
@@ -555,7 +555,7 @@ do_release() {
     warn "Timed out waiting for workflow. Creating release manually..."
     gh release create v1.0.0 \
         --repo "$GITHUB_USER/$REPO_NAME" \
-        --title "mintflow v1.0.0" \
+        --title "voxflow v1.0.0" \
         --notes "First cross-platform release. See README for install instructions." \
         2>&1 | tee -a "$LOG" || true
 }
@@ -592,7 +592,7 @@ if [[ -n "$FROM_ARG" ]]; then
 fi
 
 if (( LIST_ONLY == 1 )); then
-    echo -e "${BOLD}mintflow build queue${NC}"
+    echo -e "${BOLD}voxflow build queue${NC}"
     echo "Cursor model: $CURSOR_MODEL"
     print_board
     exit 0
@@ -611,7 +611,7 @@ fi
 
 echo ""
 echo -e "${GREEN}================================================================${NC}"
-echo -e "${GREEN}  mintflow cross-platform build${NC}"
+echo -e "${GREEN}  voxflow cross-platform build${NC}"
 echo -e "${GREEN}  Cursor model: $CURSOR_MODEL${NC}"
 echo -e "${GREEN}  Log: $LOG${NC}"
 echo -e "${GREEN}================================================================${NC}"
@@ -622,8 +622,8 @@ ensure_repo
 
 # Add PLAN.md and existing files
 cd "$PROJECT"
-if [[ -n "$(git status --porcelain PLAN.md mintflow.svg 2>/dev/null)" ]]; then
-    git add PLAN.md mintflow.svg .gitignore
+if [[ -n "$(git status --porcelain PLAN.md voxflow.svg 2>/dev/null)" ]]; then
+    git add PLAN.md voxflow.svg .gitignore
     git -c core.hooksPath=/tmp/nohooks commit -m "Add build plan and assets" || true
     push_changes
 fi
@@ -713,11 +713,11 @@ do_release
 
 echo ""
 echo -e "${GREEN}================================================================${NC}"
-echo -e "${GREEN}  mintflow v1.0.0 shipped!${NC}"
+echo -e "${GREEN}  voxflow v1.0.0 shipped!${NC}"
 echo -e "${GREEN}  https://github.com/$GITHUB_USER/$REPO_NAME${NC}"
 echo -e "${GREEN}================================================================${NC}"
 echo ""
 echo "Install:  pip install git+https://github.com/$GITHUB_USER/$REPO_NAME"
 echo "Or:       cd $PROJECT && pip install -e ."
-echo "Test:     mintflow test-mic"
-echo "Run:      mintflow"
+echo "Test:     voxflow test-mic"
+echo "Run:      voxflow"

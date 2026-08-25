@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run every mintflow check. No display, no microphone, no network needed.
+"""Run every voxflow check. No display, no microphone, no network needed.
 
     python3 tests/run_all.py
 """

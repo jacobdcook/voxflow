@@ -1,4 +1,4 @@
-# mintflow — Cross-Platform Voice-to-Text (Wispr Flow for Everyone)
+# voxflow — Cross-Platform Voice-to-Text (Wispr Flow for Everyone)
 
 ## What It Is
 
@@ -10,27 +10,27 @@ Like Wispr Flow, but open-source and runs on Linux, macOS, and Windows.
 
 ## Current State
 
-- `mintflow_v0.py` — working 1300-line Linux/X11 prototype (GTK3 overlay, Xlib hotkey grab, xclip paste)
+- `voxflow_v0.py` — working 1300-line Linux/X11 prototype (GTK3 overlay, Xlib hotkey grab, xclip paste)
 - Runs on Jacob's machine: RTX 4090, Linux Mint, Cinnamon/X11
-- Config at `~/.config/mintflow/config.json`
-- Vocabulary at `~/.config/mintflow/vocabulary.txt`
-- Autostart desktop entry at `~/.config/autostart/mintflow.desktop`
+- Config at `~/.config/voxflow/config.json`
+- Vocabulary at `~/.config/voxflow/vocabulary.txt`
+- Autostart desktop entry at `~/.config/autostart/voxflow.desktop`
 
 ## Target: v1.0.0 Cross-Platform Package
 
 ### Package Structure
 
 ```
-mintflow/                    # repo root
-├── pyproject.toml           # pip install mintflow
+voxflow/                    # repo root
+├── pyproject.toml           # pip install voxflow
 ├── README.md                # non-programmer install guide per OS
 ├── LICENSE                  # MIT
 ├── PLAN.md                  # this file
-├── mintflow_v0.py           # original prototype (reference only)
-├── mintflow.svg             # app icon
-├── mintflow/                # Python package
+├── voxflow_v0.py           # original prototype (reference only)
+├── voxflow.svg             # app icon
+├── voxflow/                # Python package
 │   ├── __init__.py          # __version__
-│   ├── __main__.py          # python -m mintflow
+│   ├── __main__.py          # python -m voxflow
 │   ├── cli.py               # arg parsing: run, quit, setup, set-hotkey, test-mic, test-inject
 │   ├── config.py            # load/save config, vocabulary, paths, defaults, STYLE_HINTS
 │   ├── gpu.py               # detect GPU vendor/VRAM → recommend model+device+compute_type
@@ -76,9 +76,9 @@ mintflow/                    # repo root
 ### config.py
 
 Platform-aware config paths:
-- Linux: `~/.config/mintflow/`
-- macOS: `~/Library/Application Support/mintflow/`
-- Windows: `%APPDATA%/mintflow/`
+- Linux: `~/.config/voxflow/`
+- macOS: `~/Library/Application Support/voxflow/`
+- Windows: `%APPDATA%/voxflow/`
 
 Default config:
 ```json
@@ -242,7 +242,7 @@ class Backend:
 
 ### platform/linux.py
 
-Port from mintflow_v0.py. Uses:
+Port from voxflow_v0.py. Uses:
 - **Xlib** for hotkey grab (X.GrabModeAsync, handles autorepeat debounce)
 - **GTK3** for overlay window (custom Cairo drawing with waveform bars)
 - **PangoCairo** for streaming text rendering in the overlay
@@ -315,15 +315,15 @@ def get_backend():
 ### cli.py
 
 Entry point function `main()` handles:
-- `mintflow` or `mintflow run` — start daemon
-- `mintflow quit` or `mintflow stop` — stop daemon (send SIGTERM / taskkill)
-- `mintflow setup` — first-run wizard: detect GPU, configure model, set hotkey, install Ollama model
-- `mintflow set-hotkey` — capture hotkey dialog
-- `mintflow test-mic` — record 2.5s, transcribe, print
-- `mintflow test-inject` — paste test string
-- `mintflow demo` — show overlay animation
-- `mintflow models` — print GPU detection and recommended model
-- `mintflow -h` / `mintflow --help`
+- `voxflow` or `voxflow run` — start daemon
+- `voxflow quit` or `voxflow stop` — stop daemon (send SIGTERM / taskkill)
+- `voxflow setup` — first-run wizard: detect GPU, configure model, set hotkey, install Ollama model
+- `voxflow set-hotkey` — capture hotkey dialog
+- `voxflow test-mic` — record 2.5s, transcribe, print
+- `voxflow test-inject` — paste test string
+- `voxflow demo` — show overlay animation
+- `voxflow models` — print GPU detection and recommended model
+- `voxflow -h` / `voxflow --help`
 
 PID file management for single-instance enforcement.
 Signal handlers (SIGTERM, SIGINT) for clean shutdown.
@@ -377,10 +377,10 @@ The README must be readable by someone who has never used a terminal. Structure:
 1. **Hero section** — one sentence: "Talk instead of typing. Works everywhere."
 2. **How it works** — Hold key, speak, release. 15-word explanation.
 3. **Install** — three separate sections for macOS, Windows, Linux. Each has numbered steps with copy-paste commands. No jargon without explanation.
-4. **Set your hotkey** — `mintflow set-hotkey` (window pops, press your key)
+4. **Set your hotkey** — `voxflow set-hotkey` (window pops, press your key)
 5. **Settings** — table of config.json options with plain-English descriptions
 6. **Custom vocabulary** — how to add names/terms to vocabulary.txt
-7. **GPU & model info** — `mintflow models` shows what was detected
+7. **GPU & model info** — `voxflow models` shows what was detected
 8. **Troubleshooting** — FAQ with common issues
 9. **Privacy** — "Everything runs on your computer. Nothing leaves your machine."
 
@@ -391,36 +391,36 @@ The README must be readable by someone who has never used a terminal. Structure:
 Each script should:
 1. Check Python 3.10+ (suggest install if missing)
 2. Install system dependencies (portaudio, xclip, etc)
-3. `pip install mintflow` (or `pip install .` for dev)
+3. `pip install voxflow` (or `pip install .` for dev)
 4. Check if Ollama is installed (suggest install if not)
 5. Pull default Ollama model (`ollama pull qwen2.5:7b`)
-6. Run `mintflow setup` (GPU detection + set-hotkey)
+6. Run `voxflow setup` (GPU detection + set-hotkey)
 7. Set up autostart (systemd user service / launchd / Start Menu)
 8. Print "Ready! Press [KEY] to talk."
 
 ### Linux (scripts/install-linux.sh)
 ```bash
 # apt install python3-pip python3-gi python3-xlib xclip xdotool libportaudio2
-# pip install mintflow
+# pip install voxflow
 # ollama pull qwen2.5:7b
-# mintflow setup
+# voxflow setup
 ```
 
 ### macOS (scripts/install-mac.sh)
 ```bash
 # brew install python portaudio ollama
-# pip3 install mintflow
+# pip3 install voxflow
 # ollama pull qwen2.5:7b
-# mintflow setup
+# voxflow setup
 ```
 
 ### Windows (scripts/install-win.ps1)
 ```powershell
 # winget install Python.Python.3.12
-# pip install mintflow
+# pip install voxflow
 # winget install Ollama.Ollama
 # ollama pull qwen2.5:7b
-# mintflow setup
+# voxflow setup
 ```
 
 ---
@@ -453,7 +453,7 @@ No PyInstaller binaries for v1.0.0 (pip install is simpler).
 
 7. **No `os.getuid()` on Windows.** Use `os.getpid()` or `os.getlogin()` for PID file naming.
 
-8. **pynput suppress=True on Mac/Windows.** Without suppress, the hotkey event reaches the focused app AND mintflow. For typing keys this means double-input.
+8. **pynput suppress=True on Mac/Windows.** Without suppress, the hotkey event reaches the focused app AND voxflow. For typing keys this means double-input.
 
 9. **The hotkey `keycode:N` format.** When set-hotkey captures a non-standard key, it stores the raw hardware keycode. The platform backend must handle this format.
 

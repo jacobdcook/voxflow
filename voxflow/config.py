@@ -9,7 +9,7 @@ import tempfile
 import time
 from pathlib import Path
 
-APP_NAME = "mintflow"
+APP_NAME = "voxflow"
 
 
 def _config_dir() -> Path:
@@ -33,11 +33,43 @@ def _pid_suffix() -> str:
         return os.environ.get("USERNAME") or os.environ.get("USER") or "user"
 
 
+def _legacy_config_dir() -> Path:
+    """Where the tool stored config under its former name (mintflow)."""
+    if sys.platform == "win32":
+        base = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
+        return Path(base) / "mintflow"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "mintflow"
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    if xdg:
+        return Path(xdg) / "mintflow"
+    return Path.home() / ".config" / "mintflow"
+
+
+def _migrate_legacy_config(new_dir: Path) -> None:
+    """One-time: carry settings over from the old mintflow config dir."""
+    old = _legacy_config_dir()
+    if new_dir.exists() or not old.exists():
+        return
+    try:
+        import shutil
+
+        shutil.copytree(old, new_dir)
+        # The old log name does not matter; drop it so the new one starts clean.
+        for stale in ("mintflow.log",):
+            p = new_dir / stale
+            if p.exists():
+                p.unlink()
+    except OSError:
+        pass
+
+
 CONFIG_DIR = _config_dir()
+_migrate_legacy_config(CONFIG_DIR)
 CONFIG_PATH = CONFIG_DIR / "config.json"
-LOG_PATH = CONFIG_DIR / "mintflow.log"
+LOG_PATH = CONFIG_DIR / "voxflow.log"
 VOCAB_PATH = CONFIG_DIR / "vocabulary.txt"
-PID_PATH = Path(tempfile.gettempdir()) / f"mintflow-{_pid_suffix()}.pid"
+PID_PATH = Path(tempfile.gettempdir()) / f"voxflow-{_pid_suffix()}.pid"
 
 DEFAULTS = {
     "hotkey": "pause",
@@ -113,7 +145,7 @@ def log(msg: str) -> None:
             f.write(line + "\n")
     except OSError:
         pass
-    print(f"[mintflow] {msg}", flush=True)
+    print(f"[voxflow] {msg}", flush=True)
 
 
 def save_config(cfg: dict) -> None:
@@ -184,7 +216,7 @@ def sanitize_config(cfg: dict) -> dict:
         log(
             f"WARNING: ollama_url points at {url}, which is not this computer. "
             "Every transcript will be sent there. Set it back to "
-            f"{DEFAULTS['ollama_url']} to keep mintflow fully local."
+            f"{DEFAULTS['ollama_url']} to keep voxflow fully local."
         )
     if "hotkey_typing" in clean:
         typing = _as_bool(clean["hotkey_typing"])

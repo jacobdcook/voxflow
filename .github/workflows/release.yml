@@ -57,12 +57,12 @@ jobs:
       - name: Build bundle
         shell: bash
         run: |
-          python -m PyInstaller --noconfirm --onedir --name mintflow \
+          python -m PyInstaller --noconfirm --onedir --name voxflow \
             --collect-all faster_whisper \
             --collect-all ctranslate2 \
             --hidden-import sounddevice \
             --hidden-import httpx \
-            --collect-submodules mintflow \
+            --collect-submodules voxflow \
             --exclude-module matplotlib \
             --exclude-module PIL \
             --exclude-module pandas \
@@ -77,19 +77,19 @@ jobs:
       - name: Trim bundle (linux)
         if: matrix.label == 'linux'
         run: |
-          rm -rf dist/mintflow/_internal/share/icons \
-                 dist/mintflow/_internal/share/themes \
-                 dist/mintflow/_internal/share/locale \
-                 dist/mintflow/_internal/share/doc \
-                 dist/mintflow/_internal/share/man || true
-          du -sh dist/mintflow
+          rm -rf dist/voxflow/_internal/share/icons \
+                 dist/voxflow/_internal/share/themes \
+                 dist/voxflow/_internal/share/locale \
+                 dist/voxflow/_internal/share/doc \
+                 dist/voxflow/_internal/share/man || true
+          du -sh dist/voxflow
 
       - name: Zip (unix)
         if: matrix.label != 'win'
         run: |
           VERSION="${GITHUB_REF_NAME}"
           cd dist
-          zip -qr "mintflow-${VERSION}-${{ matrix.label }}.zip" mintflow
+          zip -qr "voxflow-${VERSION}-${{ matrix.label }}.zip" voxflow
           ls -la *.zip
 
       - name: Zip (windows)
@@ -97,14 +97,14 @@ jobs:
         shell: pwsh
         run: |
           $version = "${env:GITHUB_REF_NAME}"
-          Compress-Archive -Path dist\mintflow -DestinationPath "dist\mintflow-$version-win.zip"
+          Compress-Archive -Path dist\voxflow -DestinationPath "dist\voxflow-$version-win.zip"
           Get-ChildItem dist\*.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mintflow-${{ matrix.label }}
-          path: dist/mintflow-*.zip
+          name: voxflow-${{ matrix.label }}
+          path: dist/voxflow-*.zip
           if-no-files-found: error
 
   wheel:
@@ -120,7 +120,7 @@ jobs:
           python -m build
       - uses: actions/upload-artifact@v4
         with:
-          name: mintflow-pydist
+          name: voxflow-pydist
           path: |
             dist/*.whl
             dist/*.tar.gz
@@ -143,7 +143,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME}"
           cat > /tmp/release-notes.md <<EOF
-          mintflow ${VERSION}
+          voxflow ${VERSION}
 
           Hold a key, speak, release. Cleaned text pastes into whatever app is focused.
           Local-only: Whisper for speech-to-text, Ollama for cleanup. No cloud, no account, no word cap.
@@ -154,12 +154,12 @@ jobs:
 
           | Platform | File |
           |---|---|
-          | Linux | mintflow-${VERSION}-linux.zip |
-          | macOS | mintflow-${VERSION}-macos.zip |
-          | Windows | mintflow-${VERSION}-win.zip |
+          | Linux | voxflow-${VERSION}-linux.zip |
+          | macOS | voxflow-${VERSION}-macos.zip |
+          | Windows | voxflow-${VERSION}-win.zip |
 
-          Unzip, then run the \`mintflow\` executable inside (\`mintflow.exe\` on Windows).
-          First run: \`mintflow setup\` detects your hardware and lets you pick a hotkey.
+          Unzip, then run the \`voxflow\` executable inside (\`voxflow.exe\` on Windows).
+          First run: \`voxflow setup\` detects your hardware and lets you pick a hotkey.
 
           For the best text cleanup also install [Ollama](https://ollama.com) and run:
           \`ollama pull qwen2.5:7b\`
@@ -167,8 +167,8 @@ jobs:
           ## Or install with pip
 
           \`\`\`
-          pip install mintflow
-          mintflow setup
+          pip install voxflow
+          voxflow setup
           \`\`\`
 
           Full instructions: https://github.com/${GITHUB_REPOSITORY}#readme
@@ -183,5 +183,5 @@ jobs:
           gh release delete "${GITHUB_REF_NAME}" --yes --repo "${GITHUB_REPOSITORY}" 2>/dev/null || true
           gh release create "${GITHUB_REF_NAME}" artifacts/*.zip artifacts/*.whl artifacts/*.tar.gz \
             --repo "${GITHUB_REPOSITORY}" \
-            --title "mintflow ${GITHUB_REF_NAME}" \
+            --title "voxflow ${GITHUB_REF_NAME}" \
             --notes-file /tmp/release-notes.md

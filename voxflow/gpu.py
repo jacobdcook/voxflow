@@ -10,7 +10,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from mintflow.config import log, save_config
+from voxflow.config import log, save_config
 
 
 @dataclass
@@ -132,7 +132,7 @@ def _rocm_vram_gb(mem: str) -> float:
 @functools.lru_cache(maxsize=1)
 def detect_gpu() -> GPUInfo:
     """Cached: nvidia-smi/rocm-smi cost 100-300 ms and hardware does not change
-    while mintflow is running."""
+    while voxflow is running."""
     ram = _ram_gb()
 
     if shutil.which("nvidia-smi"):

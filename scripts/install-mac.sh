@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# mintflow macOS installer (Homebrew).
+# voxflow macOS installer (Homebrew).
 set -euo pipefail
 
 OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5:7b}"
-VENV="$HOME/.local/share/mintflow/venv"
+VENV="$HOME/.local/share/voxflow/venv"
 BIN_DIR="$HOME/.local/bin"
 LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
-PLIST="$LAUNCH_AGENTS/com.mintflow.app.plist"
+PLIST="$LAUNCH_AGENTS/com.voxflow.app.plist"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
@@ -60,7 +60,7 @@ if ! command -v ollama >/dev/null 2>&1; then
 fi
 ok "system dependencies"
 
-info "Installing mintflow"
+info "Installing voxflow"
 mkdir -p "$VENV" "$BIN_DIR"
 if [[ ! -x "$VENV/bin/python" ]]; then
   "$PY" -m venv "$VENV"
@@ -70,10 +70,10 @@ if [[ -f "$REPO_ROOT/pyproject.toml" ]]; then
   "$VENV/bin/python" -m pip install "$REPO_ROOT[desktop]"
   ok "installed from this repo"
 else
-  "$VENV/bin/python" -m pip install "mintflow[desktop]"
+  "$VENV/bin/python" -m pip install "voxflow[desktop]"
   ok "installed from PyPI"
 fi
-ln -sfn "$VENV/bin/mintflow" "$BIN_DIR/mintflow"
+ln -sfn "$VENV/bin/voxflow" "$BIN_DIR/voxflow"
 
 if ! printf ':%s:' "$PATH" | grep -q ":$BIN_DIR:"; then
   export PATH="$BIN_DIR:$PATH"
@@ -82,13 +82,13 @@ if ! printf ':%s:' "$PATH" | grep -q ":$BIN_DIR:"; then
       continue
     fi
     touch "$rc"
-    printf '\n# mintflow\nexport PATH="%s:$PATH"\n' "$BIN_DIR" >> "$rc"
+    printf '\n# voxflow\nexport PATH="%s:$PATH"\n' "$BIN_DIR" >> "$rc"
     ok "added $BIN_DIR to PATH in $rc"
     break
   done
-  warn "If the mintflow command is not found, open a new terminal (PATH was updated)."
+  warn "If the voxflow command is not found, open a new terminal (PATH was updated)."
 fi
-ok "mintflow -> $BIN_DIR/mintflow"
+ok "voxflow -> $BIN_DIR/voxflow"
 
 info "Checking Ollama"
 if command -v ollama >/dev/null 2>&1; then
@@ -107,12 +107,12 @@ else
 fi
 
 info "First-run setup (GPU detect + hotkey)"
-if command -v mintflow >/dev/null 2>&1; then
-  MF=mintflow
+if command -v voxflow >/dev/null 2>&1; then
+  MF=voxflow
 else
-  MF="$BIN_DIR/mintflow"
+  MF="$BIN_DIR/voxflow"
 fi
-"$MF" setup || warn "setup did not finish. Later run: mintflow setup"
+"$MF" setup || warn "setup did not finish. Later run: voxflow setup"
 
 info "Setting up login autostart (launchd)"
 mkdir -p "$LAUNCH_AGENTS"
@@ -122,10 +122,10 @@ cat > "$PLIST" <<EOF
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.mintflow.app</string>
+  <string>com.voxflow.app</string>
   <key>ProgramArguments</key>
   <array>
-    <string>$VENV/bin/mintflow</string>
+    <string>$VENV/bin/voxflow</string>
   </array>
   <key>RunAtLoad</key>
   <true/>
@@ -136,7 +136,7 @@ cat > "$PLIST" <<EOF
 EOF
 
 UID_NUM="$(id -u)"
-launchctl bootout "gui/${UID_NUM}/com.mintflow.app" >/dev/null 2>&1 || true
+launchctl bootout "gui/${UID_NUM}/com.voxflow.app" >/dev/null 2>&1 || true
 if launchctl bootstrap "gui/${UID_NUM}" "$PLIST" >/dev/null 2>&1; then
   ok "launchd agent loaded"
 else
@@ -144,14 +144,14 @@ else
   ok "autostart registered"
 fi
 
-warn "macOS will ask for Microphone and Accessibility permission. Allow both or mintflow cannot hear you or paste text."
+warn "macOS will ask for Microphone and Accessibility permission. Allow both or voxflow cannot hear you or paste text."
 
 KEY="Pause"
-CFG="$HOME/Library/Application Support/mintflow/config.json"
+CFG="$HOME/Library/Application Support/voxflow/config.json"
 if [[ -f "$CFG" ]]; then
   KEY="$("$PY" -c '
 import json, pathlib
-p = pathlib.Path.home() / "Library" / "Application Support" / "mintflow" / "config.json"
+p = pathlib.Path.home() / "Library" / "Application Support" / "voxflow" / "config.json"
 try:
     cfg = json.loads(p.read_text(encoding="utf-8"))
 except Exception:
@@ -162,4 +162,4 @@ print(cfg.get("hotkey_label") or str(cfg.get("hotkey") or "pause").upper())
 fi
 
 printf '\nReady! Press %s to talk.\n' "$KEY"
-printf 'Stop later with: mintflow quit\n'
+printf 'Stop later with: voxflow quit\n'

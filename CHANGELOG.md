@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to mintflow are documented here.
+All notable changes to voxflow are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
@@ -14,8 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - LLM cleanup pass via Ollama (fillers removed, self-corrections applied, grammar fixed)
 - Regex fallback cleanup when Ollama is unavailable
 - GPU auto-detection: NVIDIA VRAM tiers, Apple Silicon, AMD ROCm, CPU RAM tiers
-- `mintflow setup` first-run wizard (model pick + hotkey capture)
-- `mintflow set-hotkey`: press any key, it becomes the hotkey (raw keycode support)
+- `voxflow setup` first-run wizard (model pick + hotkey capture)
+- `voxflow set-hotkey`: press any key, it becomes the hotkey (raw keycode support)
 - Custom vocabulary file feeding both Whisper and the cleanup model
 - Terminal-aware output: no trailing period, command syntax preserved in terminals
 - Linux backend: X11 hotkey grab, GTK3 overlay, xclip/xdotool paste

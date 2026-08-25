@@ -5,7 +5,7 @@ import time
 
 import numpy as np
 
-import mintflow.app as A
+import voxflow.app as A
 
 CLOCK = {"now": 1000.0}
 
@@ -202,7 +202,7 @@ def settle(app, timeout=3.0):
     t0 = time.time()
     while time.time() - t0 < timeout:
         alive = [
-            t for t in threading.enumerate() if t.name in ("mintflow-stt", "mintflow-stream")
+            t for t in threading.enumerate() if t.name in ("voxflow-stt", "voxflow-stream")
         ]
         if not alive:
             return

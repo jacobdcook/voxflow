@@ -1,7 +1,7 @@
 """Platform-agnostic hold-to-talk orchestrator.
 
 FlowApp talks to OS-specific code only through the Backend interface
-(GTK/Xlib, tkinter/pynput, etc. stay in mintflow.platform).
+(GTK/Xlib, tkinter/pynput, etc. stay in voxflow.platform).
 """
 
 from __future__ import annotations
@@ -15,9 +15,9 @@ from typing import Any, Callable, Protocol
 
 import numpy as np
 
-from mintflow.audio import Recorder
-from mintflow.config import load_vocabulary, log, save_config
-from mintflow.engine import Engine
+from voxflow.audio import Recorder
+from voxflow.config import load_vocabulary, log, save_config
+from voxflow.engine import Engine
 
 STREAM_LOCK_S = 30.0
 STREAM_TAIL_S = 10.0
@@ -78,7 +78,7 @@ def notify(body: str) -> None:
     try:
         if sys.platform.startswith("linux"):
             subprocess.Popen(
-                ["notify-send", "-a", "mintflow", "-u", "low", "mintflow", body],
+                ["notify-send", "-a", "voxflow", "-u", "low", "voxflow", body],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
@@ -88,7 +88,7 @@ def notify(body: str) -> None:
                 [
                     "osascript",
                     "-e",
-                    f'display notification "{escaped}" with title "mintflow"',
+                    f'display notification "{escaped}" with title "voxflow"',
                 ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -116,11 +116,11 @@ class FlowApp:
 
     def __init__(self, cfg: dict, backend: Backend | None = None) -> None:
         if backend is None:
-            from mintflow.platform import get_backend
+            from voxflow.platform import get_backend
 
             backend = get_backend()
         if any(str(cfg.get(k, "")).lower() == "auto" for k in ("model", "device", "compute_type")):
-            from mintflow.gpu import setup_auto_config
+            from voxflow.gpu import setup_auto_config
 
             cfg = setup_auto_config(cfg)
         self.cfg = cfg
@@ -150,7 +150,7 @@ class FlowApp:
 
     def start(self) -> None:
         threading.Thread(
-            target=self.engine.preload, daemon=True, name="mintflow-preload"
+            target=self.engine.preload, daemon=True, name="voxflow-preload"
         ).start()
         try:
             self.backend.hotkey_grab(
@@ -198,13 +198,13 @@ class FlowApp:
         if not self.engine.ready.is_set():
             return True
         if self.engine.model is None:
-            notify("mintflow failed to load whisper. Check mintflow.log.")
+            notify("voxflow failed to load whisper. Check voxflow.log.")
             return False
         hk = self.cfg.get("hotkey_label") or str(self.cfg.get("hotkey") or "hotkey").upper()
         if self.tap_through:
-            notify(f"mintflow is ready. Hold {hk} to talk.")
+            notify(f"voxflow is ready. Hold {hk} to talk.")
         else:
-            notify(f"mintflow is ready. Hold {hk} to talk, tap {hk} for hands-free.")
+            notify(f"voxflow is ready. Hold {hk} to talk, tap {hk} for hands-free.")
         return False
 
     def _on_press(self) -> None:
@@ -254,15 +254,15 @@ class FlowApp:
             now = time.monotonic()
             if now - self._busy_notified > BUSY_NOTIFY_S:
                 self._busy_notified = now
-                notify("mintflow is still finishing the last recording")
+                notify("voxflow is still finishing the last recording")
             return False
         if self.state in ("listening", "armed", "handsfree_stop"):
             return False
         if not self.engine.ready.is_set():
-            notify("mintflow is still loading the model")
+            notify("voxflow is still loading the model")
             return False
         if self.engine.model is None:
-            notify("mintflow failed to load whisper. Check mintflow.log.")
+            notify("voxflow failed to load whisper. Check voxflow.log.")
             return False
         self.state = "armed"
         try:
@@ -382,7 +382,7 @@ class FlowApp:
             target=self._process,
             args=(audio,),
             daemon=True,
-            name="mintflow-stt",
+            name="voxflow-stt",
         ).start()
         return False
 
@@ -406,8 +406,8 @@ class FlowApp:
             if rms < RMS_SILENCE:
                 log(f"silence (rms {rms:.5f}), nothing to transcribe")
                 notify(
-                    "mintflow heard silence. Check that the right microphone is "
-                    "selected and not muted, then try mintflow test-mic."
+                    "voxflow heard silence. Check that the right microphone is "
+                    "selected and not muted, then try voxflow test-mic."
                 )
                 self._ui(self._hide)
                 return
@@ -458,7 +458,7 @@ class FlowApp:
         self._stream_confirmed_n = 0
         self._stream_stop = threading.Event()
         self._stream_thread = threading.Thread(
-            target=self._stream_loop, daemon=True, name="mintflow-stream"
+            target=self._stream_loop, daemon=True, name="voxflow-stream"
         )
         self._stream_thread.start()
 

@@ -3,7 +3,7 @@ import pathlib
 import re
 import sys
 
-from mintflow.config import DEFAULTS
+from voxflow.config import DEFAULTS
 
 ROOT_DIR = pathlib.Path(__file__).resolve().parent.parent
 README = (ROOT_DIR / "README.md").read_text(encoding="utf-8")
@@ -54,11 +54,11 @@ for target in re.findall(r"\]\(([^)h][^)]*)\)", README):
 check("all local links and images resolve", not missing, missing)
 
 # --- commands the README tells people to run must be real commands
-src = (ROOT_DIR / "mintflow" / "cli.py").read_text(encoding="utf-8")
+src = (ROOT_DIR / "voxflow" / "cli.py").read_text(encoding="utf-8")
 known = set(re.findall(r'arg (?:==|in \()\s*"([a-z-]+)"', src))
 known |= set(re.findall(r'"([a-z-]+)"[,)]', src.split("def main")[1].split("def cmd_help")[0]))
 blocks = "\n".join(re.findall(r"```(?:bash|powershell|text)?\n(.*?)```", README, re.S))
-used = set(re.findall(r"^\s*mintflow ([a-z-]+)", blocks, re.M))
+used = set(re.findall(r"^\s*voxflow ([a-z-]+)", blocks, re.M))
 unknown = {c for c in used if c not in known and c != "setup"}
 check("README only documents real subcommands", not unknown, sorted(unknown))
 

@@ -29,9 +29,9 @@ CASES = {
 }
 
 SNIPPET = (
-    "from mintflow.config import load_config\n"
+    "from voxflow.config import load_config\n"
     "c = load_config()\n"
-    "import mintflow.app as A\n"
+    "import voxflow.app as A\n"
     "print('sample_rate', repr(c['sample_rate']), int(c['sample_rate']))\n"
     "print('tap_ms', repr(c['tap_ms']), int(c['tap_ms']))\n"
     "print('min_seconds', float(c['min_seconds']))\n"
@@ -45,7 +45,7 @@ fails = []
 
 for name, body in CASES.items():
     root = tempfile.mkdtemp(prefix="mfcfg-")
-    d = os.path.join(root, "mintflow")
+    d = os.path.join(root, "voxflow")
     os.makedirs(d)
     with open(os.path.join(d, "config.json"), "w") as f:
         f.write(body)

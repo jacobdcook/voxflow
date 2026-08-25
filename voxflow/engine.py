@@ -10,8 +10,8 @@ import traceback
 
 import numpy as np
 
-from mintflow.cleanup import local_cleanup, ollama_rewrite
-from mintflow.config import JUNK_TRANSCRIPTS, load_config, load_vocabulary, log
+from voxflow.cleanup import local_cleanup, ollama_rewrite
+from voxflow.config import JUNK_TRANSCRIPTS, load_config, load_vocabulary, log
 
 
 _cuda_libs_loaded = False

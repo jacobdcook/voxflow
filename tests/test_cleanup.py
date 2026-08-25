@@ -1,7 +1,7 @@
 """Transcript cleanup: terminal rules, quote unwrapping, junk and sanity gates."""
 import sys
 
-from mintflow.cleanup import (
+from voxflow.cleanup import (
     _sane_rewrite,
     apply_terminal_rules,
     local_cleanup,

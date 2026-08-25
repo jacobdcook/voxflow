@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from mintflow.config import STYLE_HINTS, load_vocabulary, log
+from voxflow.config import STYLE_HINTS, load_vocabulary, log
 
 FILLERS = re.compile(
     r"\b(?:um+|uh+|erm+|uh\-huh|huh|hmm+|ah+|er+|you know|i mean|sort of|kind of)\b[,\.]?",

@@ -9,8 +9,8 @@ import subprocess
 import threading
 import time
 
-from mintflow.config import log
-from mintflow.platform import BackendUnavailable
+from voxflow.config import log
+from voxflow.platform import BackendUnavailable
 
 try:
     from Xlib import XK, X, display as xdisplay
@@ -217,7 +217,7 @@ class Overlay(Gtk.Window):
         self.connect("realize", self._on_realize)
 
     def start_animation(self) -> None:
-        # mintflow sits idle most of the day; a 30 Hz redraw timer that never
+        # voxflow sits idle most of the day; a 30 Hz redraw timer that never
         # stops is pure battery drain on a laptop.
         if self._tick_src is None:
             self._tick_src = GLib.timeout_add(33, self._tick)
@@ -506,7 +506,7 @@ def inject_text(text: str, restore_ms: int) -> None:
                 return
             clipboard_set_bytes(old)
 
-    threading.Thread(target=restore, daemon=True, name="mintflow-clip").start()
+    threading.Thread(target=restore, daemon=True, name="voxflow-clip").start()
 
 
 def play_sound_file(kind: str, volume: float = 0.3) -> None:
@@ -544,7 +544,7 @@ class HotkeyGrabber(threading.Thread):
         on_end=None,
         on_tap=None,
     ) -> None:
-        super().__init__(daemon=True, name="mintflow-hotkey")
+        super().__init__(daemon=True, name="voxflow-hotkey")
         self.spec = spec
         self.on_arm = on_arm or on_press
         self.on_commit = on_commit
@@ -751,7 +751,7 @@ def capture_hotkey_dialog(timeout_s: float = 15) -> dict | None:
     captured: dict = {}
     loop = GLib.MainLoop()
 
-    win = Gtk.Window(title="mintflow hotkey")
+    win = Gtk.Window(title="voxflow hotkey")
     win.set_position(Gtk.WindowPosition.CENTER)
     win.set_keep_above(True)
     win.set_modal(True)
@@ -764,7 +764,7 @@ def capture_hotkey_dialog(timeout_s: float = 15) -> dict | None:
 
     def render() -> None:
         label.set_markup(
-            "<span size='xx-large' weight='bold'>Press the key you want for mintflow</span>\n"
+            "<span size='xx-large' weight='bold'>Press the key you want for voxflow</span>\n"
             "<span size='large'>Any key or combo. Esc cancels.</span>\n"
             f"<span size='small' alpha='60%'>{remaining['n']}s left</span>"
         )

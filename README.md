@@ -1,9 +1,9 @@
-# mintflow
+# voxflow
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-3776AB.svg)](https://www.python.org/downloads/)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)](https://github.com/jacobdcook/mintflow)
-[![Release](https://img.shields.io/github/v/release/jacobdcook/mintflow?include_prereleases)](https://github.com/jacobdcook/mintflow/releases)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)](https://github.com/jacobdcook/voxflow)
+[![Release](https://img.shields.io/github/v/release/jacobdcook/voxflow?include_prereleases)](https://github.com/jacobdcook/voxflow/releases)
 
 Talk instead of typing. Works everywhere.
 
@@ -13,7 +13,7 @@ Local voice-to-text for Linux, macOS, and Windows. No account, no cloud, no word
 
 Hold a key, speak, and release. Cleaned text pastes into whatever app you are in.
 
-A small overlay appears while you talk. When you let go, mintflow turns speech into clean text and pastes it into the window that has focus: email, chat, a browser, a terminal, anywhere.
+A small overlay appears while you talk. When you let go, voxflow turns speech into clean text and pastes it into the window that has focus: email, chat, a browser, a terminal, anywhere.
 
 Tap a non-typing key (Pause, F8, and similar) to start hands-free mode. Tap again to stop. Hold any hotkey to talk the usual way.
 
@@ -21,12 +21,12 @@ Tap a non-typing key (Pause, F8, and similar) to start hands-free mode. Tap agai
 
 ### Easiest: download a release (no Python needed)
 
-1. Go to [Releases](https://github.com/jacobdcook/mintflow/releases/latest).
+1. Go to [Releases](https://github.com/jacobdcook/voxflow/releases/latest).
 2. Download the zip for your computer: `linux`, `macos`, or `win`.
-3. Unzip it anywhere, open the `mintflow` folder inside, and run the `mintflow` program (`mintflow.exe` on Windows).
+3. Unzip it anywhere, open the `voxflow` folder inside, and run the `voxflow` program (`voxflow.exe` on Windows).
 4. First time only, run setup so it detects your hardware and lets you pick a hotkey:
-   - Linux/macOS: open a terminal in that folder and run `./mintflow setup`
-   - Windows: open Command Prompt in that folder and run `mintflow.exe setup`
+   - Linux/macOS: open a terminal in that folder and run `./voxflow setup`
+   - Windows: open Command Prompt in that folder and run `voxflow.exe setup`
 5. For the best text cleanup, also install [Ollama](https://ollama.com) and run `ollama pull qwen2.5:7b`.
 
 Prefer installing with Python instead? Use the per-platform installers below.
@@ -46,38 +46,38 @@ The first run downloads a Whisper speech model. Expect a few minutes and one to 
    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
    ```
 
-3. Download mintflow and run the installer:
+3. Download voxflow and run the installer:
 
    ```bash
-   git clone https://github.com/jacobdcook/mintflow.git
-   cd mintflow
+   git clone https://github.com/jacobdcook/voxflow.git
+   cd voxflow
    bash scripts/install-mac.sh
    ```
 
-4. When macOS asks, allow **Microphone** and **Accessibility** for Terminal (or for the Python app). mintflow needs both: one to hear you, one to paste text.
+4. When macOS asks, allow **Microphone** and **Accessibility** for Terminal (or for the Python app). voxflow needs both: one to hear you, one to paste text.
 
 5. A window will ask you to press your hotkey. Press the key you want to hold while talking, then you are done.
 
 Already have Python 3.10+ and Homebrew? You can install by hand. Homebrew's Python
-refuses plain `pip install`, so put mintflow in its own small environment:
+refuses plain `pip install`, so put voxflow in its own small environment:
 
 ```bash
 brew install python python-tk portaudio ollama
-python3 -m venv ~/.local/share/mintflow/venv
-~/.local/share/mintflow/venv/bin/pip install "mintflow[desktop]"
-ln -sf ~/.local/share/mintflow/venv/bin/mintflow ~/.local/bin/mintflow
+python3 -m venv ~/.local/share/voxflow/venv
+~/.local/share/voxflow/venv/bin/pip install "voxflow[desktop]"
+ln -sf ~/.local/share/voxflow/venv/bin/voxflow ~/.local/bin/voxflow
 ollama pull qwen2.5:7b
-mintflow setup
+voxflow setup
 ```
 
 ### Windows
 
 1. Open **PowerShell**. Click Start, type `PowerShell`, press Enter.
-2. Download mintflow and run the installer:
+2. Download voxflow and run the installer:
 
    ```powershell
-   git clone https://github.com/jacobdcook/mintflow.git
-   cd mintflow
+   git clone https://github.com/jacobdcook/voxflow.git
+   cd voxflow
    powershell -ExecutionPolicy Bypass -File .\scripts\install-win.ps1
    ```
 
@@ -89,9 +89,9 @@ mintflow setup
 Already have Python 3.10+? You can install by hand:
 
 ```powershell
-pip install "mintflow[desktop]"
+pip install "voxflow[desktop]"
 ollama pull qwen2.5:7b
-mintflow setup
+voxflow setup
 ```
 
 Install [Ollama for Windows](https://ollama.com/download) first if the `ollama` command is not found.
@@ -101,11 +101,11 @@ Install [Ollama for Windows](https://ollama.com/download) first if the `ollama` 
 Works on Ubuntu, Debian, Linux Mint, and other apt-based desktops. The overlay and hotkey currently need **X11** (Cinnamon, GNOME on Xorg, XFCE, and similar). Wayland is not supported yet.
 
 1. Open **Terminal**.
-2. Download mintflow and run the installer:
+2. Download voxflow and run the installer:
 
    ```bash
-   git clone https://github.com/jacobdcook/mintflow.git
-   cd mintflow
+   git clone https://github.com/jacobdcook/voxflow.git
+   cd voxflow
    bash scripts/install-linux.sh
    ```
 
@@ -119,11 +119,11 @@ installed):
 
 ```bash
 sudo apt install python3-pip python3-venv python3-gi python3-gi-cairo python3-xlib xclip xdotool libportaudio2
-python3 -m venv --system-site-packages ~/.local/share/mintflow/venv
-~/.local/share/mintflow/venv/bin/pip install "mintflow[linux]"
-ln -sf ~/.local/share/mintflow/venv/bin/mintflow ~/.local/bin/mintflow
+python3 -m venv --system-site-packages ~/.local/share/voxflow/venv
+~/.local/share/voxflow/venv/bin/pip install "voxflow[linux]"
+ln -sf ~/.local/share/voxflow/venv/bin/voxflow ~/.local/bin/voxflow
 ollama pull qwen2.5:7b
-mintflow setup
+voxflow setup
 ```
 
 Install [Ollama](https://ollama.com/download) if you want LLM cleanup (recommended).
@@ -131,13 +131,13 @@ Install [Ollama](https://ollama.com/download) if you want LLM cleanup (recommend
 After install, start it any time with:
 
 ```bash
-mintflow
+voxflow
 ```
 
 Stop it with:
 
 ```bash
-mintflow quit
+voxflow quit
 ```
 
 ## Set your hotkey
@@ -147,10 +147,10 @@ The default hotkey is **Pause**. That key is easy to hold and rarely types a cha
 To pick a different key:
 
 ```bash
-mintflow set-hotkey
+voxflow set-hotkey
 ```
 
-A small window appears. Press the key (or key combination) you want. mintflow saves it and uses it from then on.
+A small window appears. Press the key (or key combination) you want. voxflow saves it and uses it from then on.
 
 - **Hold** the key: record, then paste.
 - **Tap** a non-typing key (Pause, F8, F9, ...): hands-free on/off.
@@ -158,19 +158,19 @@ A small window appears. Press the key (or key combination) you want. mintflow sa
 
 ## Settings
 
-Settings live in a file named `config.json`. mintflow creates it on first run.
+Settings live in a file named `config.json`. voxflow creates it on first run.
 
 | Computer | File |
 | --- | --- |
-| Linux | `~/.config/mintflow/config.json` |
-| macOS | `~/Library/Application Support/mintflow/config.json` |
-| Windows | `%APPDATA%\mintflow\config.json` |
+| Linux | `~/.config/voxflow/config.json` |
+| macOS | `~/Library/Application Support/voxflow/config.json` |
+| Windows | `%APPDATA%\voxflow\config.json` |
 
-Open that file in any text editor, change a value, save, then run `mintflow quit` and `mintflow` again.
+Open that file in any text editor, change a value, save, then run `voxflow quit` and `voxflow` again.
 
 | Setting | Default | What it means |
 | --- | --- | --- |
-| `hotkey` | `pause` | The key you hold to talk. Prefer `mintflow set-hotkey` over editing this by hand. |
+| `hotkey` | `pause` | The key you hold to talk. Prefer `voxflow set-hotkey` over editing this by hand. |
 | `handsfree_max_s` | `180` | Longest hands-free recording, in seconds (3 minutes). |
 | `max_seconds` | `600` | Hard stop for any recording, in seconds (10 minutes). Protects you if a key sticks. |
 | `model` | `auto` | Whisper model size. `auto` picks one that fits your computer. |
@@ -188,7 +188,7 @@ Open that file in any text editor, change a value, save, then run `mintflow quit
 | `sounds` | `true` | Play a short sound when recording starts and finishes. |
 | `sound_volume` | `0.3` | How loud those sounds are, from `0.0` to `1.0`. Windows plays them at the system volume. |
 | `restore_clipboard_ms` | `450` | After paste, put your old clipboard contents back. |
-| `stream_interval_s` | `1.0` | How often the overlay updates the words you are saying. On a slow machine mintflow backs off on its own. |
+| `stream_interval_s` | `0.7` | How often the overlay updates the words you are saying. On a slow machine voxflow backs off on its own. |
 
 ## Custom vocabulary
 
@@ -198,21 +198,21 @@ One term per line. Lines that start with `#` are ignored.
 
 ```text
 # People and products I say often
-Mintflow
+Voxflow
 Jacob Cook
 Qwen
 Ollama
 CySA+
 ```
 
-mintflow feeds this list to Whisper and to the cleanup model so those spellings are preferred. After you edit the file, run `mintflow quit` and start mintflow again.
+voxflow feeds this list to Whisper and to the cleanup model so those spellings are preferred. After you edit the file, run `voxflow quit` and start voxflow again.
 
 ## GPU & model
 
-mintflow looks at your hardware and picks a Whisper model. See what it chose:
+voxflow looks at your hardware and picks a Whisper model. See what it chose:
 
 ```bash
-mintflow models
+voxflow models
 ```
 
 Typical picks:
@@ -228,7 +228,7 @@ Typical picks:
 | CPU with 8 to 16 GB RAM | `small` | CPU |
 | CPU with less than 8 GB RAM | `base` | CPU |
 
-To force a size, set `"model"` in `config.json` to `base`, `small`, `medium`, or `large-v3`, then restart mintflow.
+To force a size, set `"model"` in `config.json` to `base`, `small`, `medium`, or `large-v3`, then restart voxflow.
 
 The first time a model is used, faster-whisper downloads it. That is local after that. Cleanup uses Ollama (`qwen2.5:7b` by default), which also stays on your machine.
 
@@ -236,23 +236,23 @@ The first time a model is used, faster-whisper downloads it. That is local after
 
 Everything runs on your computer. Nothing leaves your machine.
 
-Speech is transcribed with Whisper on your CPU or GPU. Cleanup talks to Ollama on `127.0.0.1`. There is no mintflow account, no cloud API key, and no telemetry. If the network is unplugged, dictation still works (Ollama must already be installed and the Whisper model already downloaded).
+Speech is transcribed with Whisper on your CPU or GPU. Cleanup talks to Ollama on `127.0.0.1`. There is no voxflow account, no cloud API key, and no telemetry. If the network is unplugged, dictation still works (Ollama must already be installed and the Whisper model already downloaded).
 
-The only way a transcript leaves your computer is if you point `ollama_url` at another machine yourself. mintflow writes a warning to `mintflow.log` when you do.
+The only way a transcript leaves your computer is if you point `ollama_url` at another machine yourself. voxflow writes a warning to `voxflow.log` when you do.
 
 ## Troubleshooting
 
-**The overlay never appears.** Make sure mintflow is running (`mintflow`). Hold the hotkey for longer than a quick tap. On macOS, grant Accessibility. On Linux, use an X11 session, not Wayland.
+**The overlay never appears.** Make sure voxflow is running (`voxflow`). Hold the hotkey for longer than a quick tap. On macOS, grant Accessibility. On Linux, use an X11 session, not Wayland.
 
-**The key does nothing.** Run `mintflow set-hotkey` and press the key again. Another program may already own that key. Pause and F8 are usually free. On macOS, Accessibility must be allowed or the key never reaches mintflow.
+**The key does nothing.** Run `voxflow set-hotkey` and press the key again. Another program may already own that key. Pause and F8 are usually free. On macOS, Accessibility must be allowed or the key never reaches voxflow.
 
-**I spoke, but nothing pasted.** Click into a text field first. Try `mintflow test-inject` and see if the test sentence appears. On Linux, install `xclip` and `xdotool`. On macOS, allow Accessibility. Some apps block paste; click the field and try again.
+**I spoke, but nothing pasted.** Click into a text field first. Try `voxflow test-inject` and see if the test sentence appears. On Linux, install `xclip` and `xdotool`. On macOS, allow Accessibility. Some apps block paste; click the field and try again.
 
-**The microphone is silent or too quiet.** Run `mintflow test-mic`, speak a sentence, and read what it prints. It tells you whether the problem is the device, the volume, or the language setting. Check the OS microphone privacy toggle and the default input device, and close other apps that might be holding the mic.
+**The microphone is silent or too quiet.** Run `voxflow test-mic`, speak a sentence, and read what it prints. It tells you whether the problem is the device, the volume, or the language setting. Check the OS microphone privacy toggle and the default input device, and close other apps that might be holding the mic.
 
-**"mintflow heard silence."** The recording came through empty. Your computer is recording from a different device than the one you spoke into, or that device is muted. Pick the right input in your sound settings, then confirm with `mintflow test-mic`.
+**"voxflow heard silence."** The recording came through empty. Your computer is recording from a different device than the one you spoke into, or that device is muted. Pick the right input in your sound settings, then confirm with `voxflow test-mic`.
 
-**"mintflow is still finishing the last recording."** You pressed the hotkey again while the previous one was still being transcribed. Wait for the overlay to disappear, then talk again.
+**"voxflow is still finishing the last recording."** You pressed the hotkey again while the previous one was still being transcribed. Wait for the overlay to disappear, then talk again.
 
 **Names and jargon come out wrong.** Add them to `vocabulary.txt` (see [Custom vocabulary](#custom-vocabulary)).
 
@@ -260,37 +260,37 @@ The only way a transcript leaves your computer is if you point `ollama_url` at a
 
 **First run is slow.** Whisper is downloading a model. Later runs are much faster. GPU machines finish transcription in a fraction of the time CPU machines need.
 
-**"mintflow is already running".** That is normal if it started at login. Use `mintflow quit` to stop it, then `mintflow` to start again.
+**"voxflow is already running".** That is normal if it started at login. Use `voxflow quit` to stop it, then `voxflow` to start again.
 
 **Linux: I am on Wayland.** Switch the session to Xorg/X11 at the login screen, or use a desktop that still offers X11 (Cinnamon, XFCE, MATE). The Linux hotkey grab is X11-only in this version.
 
-**Windows: `mintflow` is not recognized.** Close PowerShell, open a new window, and try again so PATH updates. Or call it with `python -m mintflow`.
+**Windows: `voxflow` is not recognized.** Close PowerShell, open a new window, and try again so PATH updates. Or call it with `python -m voxflow`.
 
-**macOS: tkinter error about the overlay.** Install Tk: `brew install python-tk`, then reinstall mintflow.
+**macOS: tkinter error about the overlay.** Install Tk: `brew install python-tk`, then reinstall voxflow.
 
 More commands:
 
 ```bash
-mintflow help          # list commands
-mintflow test-mic      # record 2.5 seconds and print the transcript
-mintflow test-inject   # paste a test sentence into the focused window
-mintflow demo          # show the overlay animation
-mintflow models        # print GPU detection and the chosen Whisper model
+voxflow help          # list commands
+voxflow test-mic      # record 2.5 seconds and print the transcript
+voxflow test-inject   # paste a test sentence into the focused window
+voxflow demo          # show the overlay animation
+voxflow models        # print GPU detection and the chosen Whisper model
 ```
 
-Logs are written next to your config file (`mintflow.log`).
+Logs are written next to your config file (`voxflow.log`).
 
 ## Contributing
 
 Bug reports and pull requests are welcome. Please open an issue first for large changes.
 
-- Keep mintflow local-only. Do not add cloud STT or cloud LLM backends.
+- Keep voxflow local-only. Do not add cloud STT or cloud LLM backends.
 - Read [PLAN.md](PLAN.md) for architecture, module layout, and overlay behavior.
 - Match the existing style. No AI co-author tags in commits.
 
 ```bash
-git clone https://github.com/jacobdcook/mintflow.git
-cd mintflow
+git clone https://github.com/jacobdcook/voxflow.git
+cd voxflow
 pip install -e ".[linux]"    # Linux
 pip install -e ".[desktop]"  # macOS or Windows
 ```
@@ -303,11 +303,11 @@ packaging, and this README:
 python3 tests/run_all.py
 ```
 
-Then test the path you touched for real: `mintflow models`, `mintflow test-mic`, and
+Then test the path you touched for real: `voxflow models`, `voxflow test-mic`, and
 one actual hold-to-talk paste on your OS.
 
 ## License
 
 [MIT](LICENSE). Copyright (c) 2026 Jacob Cook.
 
-You can use, copy, modify, and share mintflow. There is no warranty.
+You can use, copy, modify, and share voxflow. There is no warranty.

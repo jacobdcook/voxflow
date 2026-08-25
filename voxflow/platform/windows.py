@@ -11,8 +11,8 @@ import threading
 import time
 from ctypes import wintypes
 
-from mintflow.config import log
-from mintflow.platform import BackendUnavailable
+from voxflow.config import log
+from voxflow.platform import BackendUnavailable
 
 try:
     import tkinter as tk
@@ -474,7 +474,7 @@ def _pick_font(root: tk.Misc, size: int, weight: str = "normal") -> tkfont.Font:
 class Overlay(tk.Toplevel):
     def __init__(self, master: tk.Tk) -> None:
         super().__init__(master)
-        self.title("mintflow-overlay")
+        self.title("voxflow-overlay")
         self.overrideredirect(True)
         try:
             self.wm_attributes("-topmost", True)
@@ -998,11 +998,11 @@ def inject_text(text: str, restore_ms: int) -> None:
             except Exception:
                 pass
 
-    threading.Thread(target=restore, daemon=True, name="mintflow-clip").start()
+    threading.Thread(target=restore, daemon=True, name="voxflow-clip").start()
 
 
 def play_sound_file(kind: str, volume: float = 0.3) -> None:
-    # Windows plays notification sounds at the system volume; mintflow can only
+    # Windows plays notification sounds at the system volume; voxflow can only
     # honour 0 (silent) or "play it". Everything else is the OS mixer's call.
     if max(0.0, min(1.0, volume)) <= 0:
         return
@@ -1301,7 +1301,7 @@ def capture_hotkey_dialog(timeout_s: float = 15, parent: tk.Misc | None = None) 
         owned = True
 
     win = tk.Toplevel(parent)
-    win.title("mintflow hotkey")
+    win.title("voxflow hotkey")
     win.geometry("460x160")
     try:
         win.attributes("-topmost", True)
@@ -1316,7 +1316,7 @@ def capture_hotkey_dialog(timeout_s: float = 15, parent: tk.Misc | None = None) 
     def render() -> None:
         label.config(
             text=(
-                "Press the key you want for mintflow\n"
+                "Press the key you want for voxflow\n"
                 "Any key or combo. Esc cancels.\n"
                 f"{remaining['n']}s left"
             )
@@ -1412,7 +1412,7 @@ class WindowsBackend:
         self.cfg = cfg or {}
         self._root = tk.Tk()
         self._root.withdraw()
-        self._root.title("mintflow")
+        self._root.title("voxflow")
         self._overlay = Overlay(self._root)
         self._grabber: HotkeyGrabber | None = None
 

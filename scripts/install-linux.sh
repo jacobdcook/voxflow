@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# mintflow Linux installer (apt-based: Ubuntu, Debian, Linux Mint).
+# voxflow Linux installer (apt-based: Ubuntu, Debian, Linux Mint).
 set -euo pipefail
 
 OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5:7b}"
-VENV="${XDG_DATA_HOME:-$HOME/.local/share}/mintflow/venv"
+VENV="${XDG_DATA_HOME:-$HOME/.local/share}/voxflow/venv"
 BIN_DIR="$HOME/.local/bin"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -65,7 +65,7 @@ else
   warn "apt-get not found. Install these yourself: python3-gi python3-xlib xclip xdotool libportaudio2"
 fi
 
-info "Installing mintflow"
+info "Installing voxflow"
 mkdir -p "$VENV" "$BIN_DIR"
 if [[ ! -x "$VENV/bin/python" ]]; then
   "$PY" -m venv --system-site-packages "$VENV"
@@ -75,10 +75,10 @@ if [[ -f "$REPO_ROOT/pyproject.toml" ]]; then
   "$VENV/bin/python" -m pip install "$REPO_ROOT[linux]"
   ok "installed from this repo"
 else
-  "$VENV/bin/python" -m pip install "mintflow[linux]"
+  "$VENV/bin/python" -m pip install "voxflow[linux]"
   ok "installed from PyPI"
 fi
-ln -sfn "$VENV/bin/mintflow" "$BIN_DIR/mintflow"
+ln -sfn "$VENV/bin/voxflow" "$BIN_DIR/voxflow"
 
 if ! printf ':%s:' "$PATH" | grep -q ":$BIN_DIR:"; then
   export PATH="$BIN_DIR:$PATH"
@@ -87,14 +87,14 @@ if ! printf ':%s:' "$PATH" | grep -q ":$BIN_DIR:"; then
       continue
     fi
     if [[ -f "$rc" ]] || [[ "$rc" == "$HOME/.profile" ]]; then
-      printf '\n# mintflow\nexport PATH="%s:$PATH"\n' "$BIN_DIR" >> "$rc"
+      printf '\n# voxflow\nexport PATH="%s:$PATH"\n' "$BIN_DIR" >> "$rc"
       ok "added $BIN_DIR to PATH in $rc"
       break
     fi
   done
-  warn "If the mintflow command is not found, open a new terminal (PATH was updated)."
+  warn "If the voxflow command is not found, open a new terminal (PATH was updated)."
 fi
-ok "mintflow -> $BIN_DIR/mintflow"
+ok "voxflow -> $BIN_DIR/voxflow"
 
 info "Checking Ollama"
 if command -v ollama >/dev/null 2>&1; then
@@ -113,28 +113,28 @@ else
 fi
 
 info "First-run setup (GPU detect + hotkey)"
-if command -v mintflow >/dev/null 2>&1; then
-  MF=mintflow
+if command -v voxflow >/dev/null 2>&1; then
+  MF=voxflow
 else
-  MF="$BIN_DIR/mintflow"
+  MF="$BIN_DIR/voxflow"
 fi
 if [[ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
-  warn "No graphical display. Skip GUI setup. Later run: mintflow setup"
+  warn "No graphical display. Skip GUI setup. Later run: voxflow setup"
 else
-  "$MF" setup || warn "setup did not finish. Later run: mintflow setup"
+  "$MF" setup || warn "setup did not finish. Later run: voxflow setup"
 fi
 
 info "Setting up autostart"
 mkdir -p "$HOME/.config/systemd/user" "$HOME/.config/autostart"
-SERVICE="$HOME/.config/systemd/user/mintflow.service"
+SERVICE="$HOME/.config/systemd/user/voxflow.service"
 cat > "$SERVICE" <<EOF
 [Unit]
-Description=mintflow voice-to-text
+Description=voxflow voice-to-text
 After=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=$VENV/bin/mintflow
+ExecStart=$VENV/bin/voxflow
 Restart=on-failure
 RestartSec=3
 Environment=DISPLAY=${DISPLAY:-:0}
@@ -143,21 +143,21 @@ Environment=DISPLAY=${DISPLAY:-:0}
 WantedBy=default.target
 EOF
 
-DESKTOP="$HOME/.config/autostart/mintflow.desktop"
-ICON_SRC="$REPO_ROOT/mintflow.svg"
+DESKTOP="$HOME/.config/autostart/voxflow.desktop"
+ICON_SRC="$REPO_ROOT/voxflow.svg"
 ICON_LINE=""
 if [[ -f "$ICON_SRC" ]]; then
   ICON_DIR="$HOME/.local/share/icons/hicolor/scalable/apps"
   mkdir -p "$ICON_DIR"
-  cp "$ICON_SRC" "$ICON_DIR/mintflow.svg"
-  ICON_LINE="Icon=mintflow"
+  cp "$ICON_SRC" "$ICON_DIR/voxflow.svg"
+  ICON_LINE="Icon=voxflow"
 fi
 cat > "$DESKTOP" <<EOF
 [Desktop Entry]
 Type=Application
-Name=mintflow
+Name=voxflow
 Comment=Hold a key, speak, release
-Exec=$BIN_DIR/mintflow
+Exec=$BIN_DIR/voxflow
 Terminal=false
 X-GNOME-Autostart-enabled=true
 ${ICON_LINE}
@@ -165,8 +165,8 @@ EOF
 
 if command -v systemctl >/dev/null 2>&1; then
   systemctl --user daemon-reload >/dev/null 2>&1 || true
-  systemctl --user enable --now mintflow.service >/dev/null 2>&1 || {
-    warn "systemd user service could not start. Starting mintflow in the background."
+  systemctl --user enable --now voxflow.service >/dev/null 2>&1 || {
+    warn "systemd user service could not start. Starting voxflow in the background."
     nohup "$MF" >/dev/null 2>&1 &
   }
   ok "autostart enabled (systemd user service + desktop entry)"
@@ -176,11 +176,11 @@ else
 fi
 
 KEY="Pause"
-CFG="$HOME/.config/mintflow/config.json"
+CFG="$HOME/.config/voxflow/config.json"
 if [[ -f "$CFG" ]]; then
   KEY="$("$PY" -c '
 import json, pathlib, sys
-p = pathlib.Path.home() / ".config" / "mintflow" / "config.json"
+p = pathlib.Path.home() / ".config" / "voxflow" / "config.json"
 try:
     cfg = json.loads(p.read_text(encoding="utf-8"))
 except Exception:
@@ -191,4 +191,4 @@ print(cfg.get("hotkey_label") or str(cfg.get("hotkey") or "pause").upper())
 fi
 
 printf '\nReady! Press %s to talk.\n' "$KEY"
-printf 'Stop later with: mintflow quit\n'
+printf 'Stop later with: voxflow quit\n'
