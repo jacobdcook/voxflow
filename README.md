@@ -19,6 +19,20 @@ Tap a non-typing key (Pause, F8, and similar) to start hands-free mode. Tap agai
 
 ## Install
 
+### Easiest: download a release (no Python needed)
+
+1. Go to [Releases](https://github.com/jacobdcook/mintflow/releases/latest).
+2. Download the zip for your computer: `linux`, `macos`, or `win`.
+3. Unzip it anywhere, open the `mintflow` folder inside, and run the `mintflow` program (`mintflow.exe` on Windows).
+4. First time only, run setup so it detects your hardware and lets you pick a hotkey:
+   - Linux/macOS: open a terminal in that folder and run `./mintflow setup`
+   - Windows: open Command Prompt in that folder and run `mintflow.exe setup`
+5. For the best text cleanup, also install [Ollama](https://ollama.com) and run `ollama pull qwen2.5:7b`.
+
+Prefer installing with Python instead? Use the per-platform installers below.
+
+### With Python (pip)
+
 You need Python 3.10 or newer, a microphone, and (for the best cleanup) [Ollama](https://ollama.com) running on the same computer. The installers below check these for you.
 
 The first run downloads a Whisper speech model. Expect a few minutes and one to three gigabytes of disk, depending on which model your hardware gets.
