@@ -1,3 +1,3 @@
 from mintflow.cli import main
 
-main()
+raise SystemExit(main())
