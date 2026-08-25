@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.auto_build_state.json
+logs/
+*.log
+.env
+*.wav
+*.mp3
+mintflow_v0.py
