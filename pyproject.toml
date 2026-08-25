@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mintflow"
+version = "1.0.0"
+description = "Hold a key, speak, release. Local voice-to-text with Whisper and Ollama."
+license = {text = "MIT"}
+authors = [{name = "Jacob Cook"}]
+requires-python = ">=3.10"
+keywords = [
+    "voice-to-text",
+    "speech-to-text",
+    "whisper",
+    "dictation",
+    "ollama",
+    "offline",
+    "local",
+    "stt",
+    "accessibility",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Environment :: GPU :: NVIDIA CUDA",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "numpy>=1.24",
+    "sounddevice>=0.4",
+    "faster-whisper>=1.0",
+    "httpx>=0.24",
+]
+
+[project.optional-dependencies]
+linux = ["python-xlib>=0.33"]
+desktop = ["pynput>=1.7", "pyperclip>=1.8"]
+
+[project.urls]
+Homepage = "https://github.com/jacobdcook/mintflow"
+Repository = "https://github.com/jacobdcook/mintflow"
+Issues = "https://github.com/jacobdcook/mintflow/issues"
+
+[project.scripts]
+mintflow = "mintflow.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mintflow*"]
