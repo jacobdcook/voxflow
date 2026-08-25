@@ -19,6 +19,7 @@ from mintflow.config import (
     load_vocabulary,
     log,
 )
+from mintflow.platform import BackendUnavailable
 
 HELP = """mintflow: hold a key, speak, release. Cleaned text pastes into the focused app.
   mintflow              start daemon
@@ -66,6 +67,10 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         print()
         return 130
+    except BackendUnavailable as e:
+        # Missing desktop dependency. Say what to install, not where we crashed.
+        print(f"mintflow cannot start:\n{e}", file=sys.stderr)
+        return 1
 
 
 def cmd_help() -> int:
@@ -139,6 +144,8 @@ def cmd_set_hotkey(stop_daemon: bool = True, timeout_s: float = 15) -> int:
     try:
         backend = _make_backend(cfg)
         captured = backend.capture_hotkey(timeout_s)
+    except BackendUnavailable:
+        raise
     except Exception as e:
         print(f"hotkey capture failed: {e}", file=sys.stderr)
         return 1
@@ -160,20 +167,61 @@ def cmd_test_mic() -> int:
     from mintflow.engine import Engine
 
     cfg = _resolved_cfg()
-    log("recording 2.5s from default source...")
+    print("Recording for 2.5 seconds. Say a full sentence now...")
     rec = Recorder(int(cfg["sample_rate"]))
-    rec.start()
+    try:
+        rec.start()
+    except Exception as e:
+        print(f"Could not open the microphone: {e}", file=sys.stderr)
+        print(
+            "Check that a microphone is plugged in, that this app is allowed to "
+            "use it in your system privacy settings, and that no other app has "
+            "taken it over.",
+            file=sys.stderr,
+        )
+        return 1
     time.sleep(2.5)
     audio = rec.stop()
     rms = float(np.sqrt(np.mean(np.square(audio))) + 1e-12) if audio.size else 0.0
     log(f"samples={audio.size} rms={rms:.4f}")
+    if audio.size == 0:
+        print(
+            "The microphone returned no audio at all. Pick a different input "
+            "device in your sound settings and try again.",
+            file=sys.stderr,
+        )
+        return 1
+    if rms < 0.004:
+        print(
+            f"That was silence (level {rms:.4f}). The microphone is probably "
+            "muted, or your system is recording from a different device than "
+            "the one you spoke into.",
+            file=sys.stderr,
+        )
+        return 1
+    if rms < 0.015:
+        print(f"Warning: very quiet input (level {rms:.4f}). Try speaking closer to the mic.")
+    print("Loading the speech model (the first run downloads it)...")
     eng = Engine(cfg)
     eng.preload()
     if eng.model is None:
-        print(eng.error or "whisper failed to load", file=sys.stderr)
+        print("Whisper could not start.", file=sys.stderr)
+        print(eng.error or "no details available", file=sys.stderr)
+        print(
+            f"Try setting \"model\" to \"small\" and \"device\" to \"cpu\" in "
+            f"{CONFIG_PATH}, then run this again.",
+            file=sys.stderr,
+        )
         return 1
     raw = eng.transcribe(audio)
     print("RAW:", raw)
+    if not raw:
+        print(
+            "The microphone works, but no words were recognised. Speak a full "
+            f"sentence, and check that \"language\" in {CONFIG_PATH} matches the "
+            "language you are speaking."
+        )
+        return 0
     print("CLEAN:", eng.rewrite(raw))
     return 0
 
@@ -186,12 +234,15 @@ def cmd_test_inject() -> int:
         backend = _make_backend(cfg)
         backend.paste_text(
             "mintflow paste test. If you can see this, injection works.",
-            int(cfg.get("restore_clipboard_ms", 400)),
+            int(cfg.get("restore_clipboard_ms", 450)),
         )
+    except BackendUnavailable:
+        raise
     except Exception as e:
         print(f"inject failed: {e}", file=sys.stderr)
         return 1
-    print("injected")
+    time.sleep(0.5)
+    print("Sent. If nothing appeared, click into a text box first and run this again.")
     return 0
 
 

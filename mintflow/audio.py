@@ -44,11 +44,19 @@ class Recorder:
         self._stream.start()
 
     def get_snapshot(self) -> np.ndarray:
-        """Return a copy of all recorded audio so far without stopping."""
+        """Return all recorded audio so far without stopping the stream.
+
+        The streaming preview calls this once a second, so the per-block list is
+        collapsed to a single array first: a ten-minute recording is otherwise
+        ~9000 arrays to join on every call. Callers must treat the result as
+        read-only; nothing here mutates it in place.
+        """
         with self._lock:
             if not self._chunks:
                 return np.zeros(0, dtype=np.float32)
-            return np.concatenate(self._chunks)
+            if len(self._chunks) > 1:
+                self._chunks = [np.concatenate(self._chunks)]
+            return self._chunks[0]
 
     def stop(self) -> np.ndarray:
         if self._stream is not None:

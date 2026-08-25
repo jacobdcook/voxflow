@@ -11,3 +11,6 @@ logs/
 *.wav
 *.mp3
 mintflow_v0.py
+# a stray copy of the prototype here shadows the package name for anyone
+# running "python mintflow.py" from the repo root
+/mintflow.py

@@ -8,15 +8,27 @@ import re
 import subprocess
 import threading
 import time
-import tkinter as tk
-import tkinter.font as tkfont
 
 from mintflow.config import log
+from mintflow.platform import BackendUnavailable
+
+try:
+    import tkinter as tk
+    import tkinter.font as tkfont
+except ImportError as e:
+    raise BackendUnavailable(
+        "The overlay needs Tk, which this Python was built without.\n"
+        "  Fix it with:  brew install python-tk\n"
+        "  Then run the installer again."
+    ) from e
 
 try:
     from pynput import keyboard as pynput_keyboard
 except ImportError as e:
-    raise RuntimeError("macOS backend requires pynput (pip install pynput)") from e
+    raise BackendUnavailable(
+        "The hotkey needs pynput, which is not installed.\n"
+        "  Fix it with:  pip3 install pynput"
+    ) from e
 
 TERMINAL_NAMES = {
     "terminal",
@@ -91,6 +103,10 @@ TEXT_MAX_W = 460
 TEXT_MAX_LINES = 3
 TEXT_LINE_H = 18
 BOTTOM_MARGIN = 72
+
+# pbcopy/pbpaste/osascript can wedge when another app stalls the pasteboard.
+CMD_TIMEOUT_S = 3.0
+_INJECT_LOCK = threading.Lock()
 
 PILL_FILL = "#121214"
 PILL_OUTLINE = "#2A2A2C"
@@ -432,12 +448,19 @@ class Overlay(tk.Toplevel):
                 ):
                     target = screen
                     break
-            f = target.frame()
+            # visibleFrame excludes the Dock and the menu bar, so the overlay is
+            # never hidden behind them.
+            f = target.visibleFrame()
             cocoa_x = f.origin.x + (f.size.width - w) / 2
-            cocoa_y = f.origin.y + BOTTOM_MARGIN
-            max_h = max(s.frame().origin.y + s.frame().size.height for s in screens)
+            cocoa_y = f.origin.y + min(BOTTOM_MARGIN, max(0, f.size.height - h))
+            # Tk's y axis starts at the top of the *primary* screen (screens[0]),
+            # not at the top of whichever screen sits highest. Using the highest
+            # screen puts the overlay off-screen whenever a second display is
+            # arranged above the primary one.
+            primary = screens[0].frame()
+            flip_h = primary.origin.y + primary.size.height
             x = int(round(cocoa_x))
-            y = int(round(max_h - cocoa_y - h))
+            y = int(round(flip_h - cocoa_y - h))
             self.geometry(f"{w}x{h}+{x}+{y}")
             return
         except Exception:
@@ -586,6 +609,7 @@ def focused_is_terminal() -> bool:
             ],
             text=True,
             stderr=subprocess.DEVNULL,
+            timeout=CMD_TIMEOUT_S,
         ).strip()
     except Exception:
         return False
@@ -597,53 +621,75 @@ def focused_is_terminal() -> bool:
 
 def clipboard_get() -> bytes:
     try:
-        return subprocess.check_output(["pbpaste"], stderr=subprocess.DEVNULL)
+        return subprocess.check_output(
+            ["pbpaste"], stderr=subprocess.DEVNULL, timeout=CMD_TIMEOUT_S
+        )
     except Exception:
         return b""
 
 
-def clipboard_set(text: str) -> None:
-    p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
-    p.communicate((text or "").encode("utf-8"))
-
-
 def clipboard_set_bytes(data: bytes) -> None:
     p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
-    p.communicate(data or b"")
+    try:
+        p.communicate(data or b"", timeout=CMD_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        log("pbcopy timed out while setting the clipboard")
+
+
+def clipboard_set(text: str) -> None:
+    clipboard_set_bytes((text or "").encode("utf-8"))
 
 
 def inject_text(text: str, restore_ms: int) -> None:
     if not text:
         return
-    old = clipboard_get()
-    clipboard_set(text)
-    time.sleep(0.04)
-    subprocess.run(
-        [
-            "osascript",
-            "-e",
-            'tell application "System Events" to keystroke "v" using command down',
-        ],
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    payload = text.encode("utf-8")
+    with _INJECT_LOCK:
+        old = clipboard_get()
+        clipboard_set_bytes(payload)
+        time.sleep(0.04)
+        subprocess.run(
+            [
+                "osascript",
+                "-e",
+                'tell application "System Events" to keystroke "v" using command down',
+            ],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=CMD_TIMEOUT_S,
+        )
 
     def restore():
         time.sleep(max(0, restore_ms) / 1000)
-        clipboard_set_bytes(old)
+        if not old:
+            # Nothing (or non-text) was on the clipboard before. Wiping it would
+            # be worse than leaving the dictated text there.
+            return
+        with _INJECT_LOCK:
+            # Only undo our own paste. A newer dictation or a manual copy wins.
+            if clipboard_get() != payload:
+                return
+            clipboard_set_bytes(old)
 
-    threading.Thread(target=restore, daemon=True).start()
+    threading.Thread(target=restore, daemon=True, name="mintflow-clip").start()
 
 
-def play_sound_file(kind: str) -> None:
+def play_sound_file(kind: str, volume: float = 0.3) -> None:
+    level = max(0.0, min(1.0, volume))
+    if level <= 0:
+        return
     for path in SOUND_CANDIDATES.get(kind, ()):
         if os.path.exists(path):
-            subprocess.Popen(
-                ["afplay", path],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+            try:
+                subprocess.Popen(
+                    ["afplay", "-v", f"{level:.3f}", path],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except OSError as e:
+                log(f"afplay: {e}")
             return
 
 
@@ -1093,7 +1139,7 @@ class MacBackend:
         return focused_is_terminal()
 
     def play_sound(self, kind) -> None:
-        play_sound_file(kind)
+        play_sound_file(kind, float(self.cfg.get("sound_volume", 0.3)))
 
     def capture_hotkey(self, timeout_s=15) -> dict | None:
         return capture_hotkey_dialog(timeout_s, self._root)

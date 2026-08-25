@@ -9,16 +9,28 @@ import re
 import subprocess
 import threading
 import time
-import tkinter as tk
-import tkinter.font as tkfont
 from ctypes import wintypes
 
 from mintflow.config import log
+from mintflow.platform import BackendUnavailable
+
+try:
+    import tkinter as tk
+    import tkinter.font as tkfont
+except ImportError as e:
+    raise BackendUnavailable(
+        "The overlay needs Tk, which this Python was built without.\n"
+        "  Reinstall Python from python.org and tick "
+        '"tcl/tk and IDLE" during setup.'
+    ) from e
 
 try:
     from pynput import keyboard as pynput_keyboard
 except ImportError as e:
-    raise RuntimeError("Windows backend requires pynput (pip install pynput)") from e
+    raise BackendUnavailable(
+        "The hotkey needs pynput, which is not installed.\n"
+        "  Fix it with:  pip install pynput"
+    ) from e
 
 try:
     import pyperclip as _pyperclip
@@ -144,6 +156,8 @@ TEXT_MAX_W = 460
 TEXT_MAX_LINES = 3
 TEXT_LINE_H = 18
 BOTTOM_MARGIN = 72
+
+_INJECT_LOCK = threading.Lock()
 
 PILL_FILL = "#121214"
 PILL_OUTLINE = "#2A2A2C"
@@ -602,25 +616,38 @@ class Overlay(tk.Toplevel):
         w, h = self._win_w, self._win_h
         try:
             user32 = _user32()
-            pt = POINT()
-            user32.GetCursorPos.argtypes = [ctypes.POINTER(POINT)]
-            user32.GetCursorPos.restype = wintypes.BOOL
-            if not user32.GetCursorPos(ctypes.byref(pt)):
-                raise OSError("GetCursorPos failed")
-            user32.MonitorFromPoint.argtypes = [POINT, ctypes.c_uint]
-            user32.MonitorFromPoint.restype = ctypes.c_void_p
-            hmon = user32.MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST)
+            hmon = None
+            # The text lands in the focused window, so prefer that monitor. The
+            # pointer is often parked on a different screen entirely.
+            try:
+                user32.GetForegroundWindow.restype = wintypes.HWND
+                hwnd = user32.GetForegroundWindow()
+                if hwnd:
+                    user32.MonitorFromWindow.argtypes = [wintypes.HWND, ctypes.c_uint]
+                    user32.MonitorFromWindow.restype = ctypes.c_void_p
+                    hmon = user32.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)
+            except Exception:
+                hmon = None
             if not hmon:
-                raise OSError("MonitorFromPoint failed")
+                pt = POINT()
+                user32.GetCursorPos.argtypes = [ctypes.POINTER(POINT)]
+                user32.GetCursorPos.restype = wintypes.BOOL
+                if not user32.GetCursorPos(ctypes.byref(pt)):
+                    raise OSError("GetCursorPos failed")
+                user32.MonitorFromPoint.argtypes = [POINT, ctypes.c_uint]
+                user32.MonitorFromPoint.restype = ctypes.c_void_p
+                hmon = user32.MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST)
+            if not hmon:
+                raise OSError("could not resolve a monitor")
             mi = MONITORINFO()
             mi.cbSize = ctypes.sizeof(MONITORINFO)
             user32.GetMonitorInfoW.argtypes = [ctypes.c_void_p, ctypes.POINTER(MONITORINFO)]
             user32.GetMonitorInfoW.restype = wintypes.BOOL
             if not user32.GetMonitorInfoW(hmon, ctypes.byref(mi)):
                 raise OSError("GetMonitorInfoW failed")
-            geo = mi.rcMonitor
+            geo = mi.rcWork  # excludes the taskbar
             x = geo.left + (geo.right - geo.left - w) // 2
-            y = geo.bottom - h - BOTTOM_MARGIN
+            y = geo.bottom - h - min(BOTTOM_MARGIN, max(0, geo.bottom - geo.top - h))
             self.geometry(f"{w}x{h}+{int(x)}+{int(y)}")
             return
         except Exception:
@@ -946,26 +973,39 @@ def _send_paste(terminal: bool) -> None:
 def inject_text(text: str, restore_ms: int) -> None:
     if not text:
         return
-    old = clipboard_get()
-    clipboard_set(text)
-    time.sleep(0.04)
-    terminal = focused_is_terminal()
-    try:
-        _send_paste(terminal)
-    except Exception as e:
-        log(f"paste: {e}")
+    with _INJECT_LOCK:
+        old = clipboard_get()
+        clipboard_set(text)
+        time.sleep(0.04)
+        terminal = focused_is_terminal()
+        try:
+            _send_paste(terminal)
+        except Exception as e:
+            log(f"paste: {e}")
 
     def restore():
         time.sleep(max(0, restore_ms) / 1000)
-        try:
-            clipboard_set(old)
-        except Exception:
-            pass
+        if not old:
+            # Nothing (or non-text) was on the clipboard before. Wiping it would
+            # be worse than leaving the dictated text there.
+            return
+        with _INJECT_LOCK:
+            # Only undo our own paste. A newer dictation or a manual copy wins.
+            try:
+                if clipboard_get() != text:
+                    return
+                clipboard_set(old)
+            except Exception:
+                pass
 
-    threading.Thread(target=restore, daemon=True).start()
+    threading.Thread(target=restore, daemon=True, name="mintflow-clip").start()
 
 
-def play_sound_file(kind: str) -> None:
+def play_sound_file(kind: str, volume: float = 0.3) -> None:
+    # Windows plays notification sounds at the system volume; mintflow can only
+    # honour 0 (silent) or "play it". Everything else is the OS mixer's call.
+    if max(0.0, min(1.0, volume)) <= 0:
+        return
     for path in SOUND_CANDIDATES.get(kind, ()):
         if os.path.exists(path):
             if _winsound is not None:
@@ -986,7 +1026,8 @@ def play_sound_file(kind: str) -> None:
                         "-NoProfile",
                         "-NonInteractive",
                         "-Command",
-                        f"(New-Object System.Media.SoundPlayer '{path}').Play();",
+                        "(New-Object System.Media.SoundPlayer "
+                        f"'{path.replace(chr(39), chr(39) * 2)}').Play();",
                     ],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
@@ -1492,7 +1533,7 @@ class WindowsBackend:
         return focused_is_terminal()
 
     def play_sound(self, kind) -> None:
-        play_sound_file(kind)
+        play_sound_file(kind, float(self.cfg.get("sound_volume", 0.3)))
 
     def capture_hotkey(self, timeout_s=15) -> dict | None:
         return capture_hotkey_dialog(timeout_s, self._root)

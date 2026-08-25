@@ -14,8 +14,21 @@ from mintflow.cleanup import local_cleanup, ollama_rewrite
 from mintflow.config import JUNK_TRANSCRIPTS, load_config, load_vocabulary, log
 
 
+_cuda_libs_loaded = False
+
+
 def ensure_cuda_libs() -> None:
-    """Load pip NVIDIA wheel .so/.dll files if system CUDA is not on the path."""
+    """Load pip NVIDIA wheel .so/.dll files if system CUDA is not on the path.
+
+    Globbing site-packages is slow, so it happens once, lazily, and only right
+    before Whisper is loaded. Importing this module must stay cheap: every CLI
+    command pays for it otherwise.
+    """
+    global _cuda_libs_loaded
+    if _cuda_libs_loaded:
+        return
+    _cuda_libs_loaded = True
+
     import ctypes
     import ctypes.util
     import glob as _glob
@@ -56,10 +69,6 @@ def ensure_cuda_libs() -> None:
                     pass
 
 
-_ensure_cuda_libs = ensure_cuda_libs
-ensure_cuda_libs()
-
-
 class Engine:
     def __init__(
         self,
@@ -90,7 +99,8 @@ class Engine:
 
     def preload(self) -> None:
         try:
-            ensure_cuda_libs()
+            if "cuda" in self.device.lower():
+                ensure_cuda_libs()
             from faster_whisper import WhisperModel
 
             t0 = time.monotonic()

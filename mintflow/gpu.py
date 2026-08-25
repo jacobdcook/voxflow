@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import platform
 import shutil
 import subprocess
@@ -62,6 +63,46 @@ def _ram_gb() -> float:
                 pass
 
     if sys.platform == "win32":
+        # GlobalMemoryStatusEx is instant and always present. wmic was removed in
+        # Windows 11 24H2, so it can only be a fallback.
+        try:
+            import ctypes
+
+            class _MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            status = _MEMORYSTATUSEX()
+            status.dwLength = ctypes.sizeof(_MEMORYSTATUSEX)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+                if status.ullTotalPhys:
+                    return status.ullTotalPhys / (1024 ** 3)
+        except Exception:
+            pass
+
+        out = _run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory",
+            ]
+        )
+        try:
+            return int(out.strip()) / (1024 ** 3)
+        except ValueError:
+            pass
+
         out = _run(["wmic", "computersystem", "get", "TotalPhysicalMemory", "/value"])
         for line in out.splitlines():
             if line.lower().startswith("totalphysicalmemory="):
@@ -73,7 +114,25 @@ def _ram_gb() -> float:
     return 8.0
 
 
+def _rocm_vram_gb(mem: str) -> float:
+    """rocm-smi reports VRAM in bytes on current builds and MB on older ones."""
+    best = 0.0
+    for token in mem.replace(",", " ").split():
+        try:
+            value = float(token)
+        except ValueError:
+            continue
+        if value > 1024 ** 3:  # bytes
+            best = max(best, value / (1024 ** 3))
+        elif value > 256:  # MB
+            best = max(best, value / 1024.0)
+    return best
+
+
+@functools.lru_cache(maxsize=1)
 def detect_gpu() -> GPUInfo:
+    """Cached: nvidia-smi/rocm-smi cost 100-300 ms and hardware does not change
+    while mintflow is running."""
     ram = _ram_gb()
 
     if shutil.which("nvidia-smi"):
@@ -115,15 +174,7 @@ def detect_gpu() -> GPUInfo:
             lower = line.lower()
             if "card series" in lower or "card model" in lower or "gpu" in lower:
                 name = line.strip()
-        vram = 0.0
-        mem = _run(["rocm-smi", "--showmeminfo", "vram"])
-        for token in mem.replace(",", " ").split():
-            try:
-                value = float(token)
-            except ValueError:
-                continue
-            if value > 256:
-                vram = max(vram, value / 1024.0)
+        vram = _rocm_vram_gb(_run(["rocm-smi", "--showmeminfo", "vram"]))
         return GPUInfo(vendor="amd", name=name, vram_gb=vram, ram_gb=ram)
 
     return GPUInfo(vendor="cpu", name="CPU", vram_gb=0.0, ram_gb=ram)

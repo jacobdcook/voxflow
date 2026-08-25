@@ -21,11 +21,13 @@ from mintflow.engine import Engine
 
 STREAM_LOCK_S = 30.0
 STREAM_TAIL_S = 10.0
+STREAM_MAX_INTERVAL_S = 8.0
 LEVEL_MS = 40
 LOAD_POLL_MS = 80
 DONE_HIDE_MS = 380
 ERROR_HIDE_MS = 900
 RMS_SILENCE = 0.004
+BUSY_NOTIFY_S = 3.0
 
 
 class Backend(Protocol):
@@ -70,6 +72,9 @@ def is_typing_key(hotkey_spec: str) -> bool:
 
 def notify(body: str) -> None:
     log(body)
+    # Notification text can contain transcript fragments and error strings, so
+    # it is never interpolated into a shell; osascript gets a quoted literal.
+    body = " ".join(str(body).split())[:400]
     try:
         if sys.platform.startswith("linux"):
             subprocess.Popen(
@@ -132,9 +137,12 @@ class FlowApp:
         self._engine_lock = threading.Lock()
         self._level_src = None
         self._hf_src = None
+        self._max_src = None
         self._commit_handle = None
         self._held = False
         self._committed = False
+        self._press_t = 0.0
+        self._busy_notified = 0.0
         self._stream_stop = threading.Event()
         self._stream_thread: threading.Thread | None = None
         self._stream_confirmed = ""
@@ -159,6 +167,7 @@ class FlowApp:
         self._stream_stop.set()
         self._cancel("_level_src")
         self._cancel("_hf_src")
+        self._cancel("_max_src")
         self._cancel("_commit_handle")
         try:
             self.backend.hotkey_ungrab()
@@ -193,6 +202,7 @@ class FlowApp:
     def _on_press(self) -> None:
         self._held = True
         self._committed = False
+        self._press_t = time.monotonic()
         self._cancel("_commit_handle")
         if self.state == "listening" and self.handsfree:
             self.state = "handsfree_stop"
@@ -216,6 +226,13 @@ class FlowApp:
         self._cancel("_commit_handle")
         committed = self._committed
         self._committed = False
+        held_ms = (time.monotonic() - self._press_t) * 1000.0 if self._press_t else 0.0
+        self._press_t = 0.0
+        # Backends debounce keyboard auto-repeat, so the release callback can land
+        # after the commit timer already fired. Trust the measured hold instead,
+        # otherwise taps between (tap_ms - repeat_ms) and tap_ms are swallowed.
+        if committed and held_ms + 1.0 < float(self.cfg.get("tap_ms", 220)):
+            committed = False
         if committed:
             self.finish()
         else:
@@ -225,7 +242,13 @@ class FlowApp:
         if self.state == "listening" and self.handsfree:
             self.state = "handsfree_stop"
             return False
-        if self.state in ("transcribing", "cleaning", "listening", "armed", "handsfree_stop"):
+        if self.state in ("transcribing", "cleaning"):
+            now = time.monotonic()
+            if now - self._busy_notified > BUSY_NOTIFY_S:
+                self._busy_notified = now
+                notify("mintflow is still finishing the last recording")
+            return False
+        if self.state in ("listening", "armed", "handsfree_stop"):
             return False
         if not self.engine.ready.is_set():
             notify("mintflow is still loading the model")
@@ -258,15 +281,25 @@ class FlowApp:
         self._sound("start")
         self._cancel("_level_src")
         self._level_src = self.backend.call_later(LEVEL_MS, self._pump_level)
+        self._cancel("_max_src")
+        self._max_src = self.backend.call_later_s(
+            int(self.cfg.get("max_seconds", 600)),
+            self._max_timeout,
+        )
         self._start_stream()
 
     def abort_tap(self) -> bool:
         if self.state == "handsfree_stop":
             return self._begin_processing()
-        if self.state == "armed" and not self.tap_through:
+        if (
+            self.state in ("armed", "listening")
+            and not self.tap_through
+            and not self.handsfree
+        ):
             self.handsfree = True
-            self.state = "listening"
-            self._show_listening()
+            if self.state == "armed":
+                self.state = "listening"
+                self._show_listening()
             self._cancel("_hf_src")
             self._hf_src = self.backend.call_later_s(
                 int(self.cfg.get("handsfree_max_s", 180)),
@@ -275,6 +308,8 @@ class FlowApp:
             return False
         if self.state in ("armed", "listening"):
             self._stop_stream_flag()
+            self._cancel("_max_src")
+            self._cancel("_level_src")
             try:
                 self.recorder.stop()
             except Exception:
@@ -292,6 +327,14 @@ class FlowApp:
     def _hf_timeout(self) -> bool:
         self._hf_src = None
         if self.state == "listening" and self.handsfree:
+            self._begin_processing()
+        return False
+
+    def _max_timeout(self) -> bool:
+        """Hard stop so a stuck key or a forgotten session cannot record forever."""
+        self._max_src = None
+        if self.state == "listening":
+            log(f"max_seconds ({self.cfg.get('max_seconds', 600)}) reached, wrapping up")
             self._begin_processing()
         return False
 
@@ -313,15 +356,11 @@ class FlowApp:
 
     def _begin_processing(self) -> bool:
         self._cancel("_hf_src")
+        self._cancel("_max_src")
         self._cancel("_level_src")
         self.handsfree = False
         self.state = "transcribing"
         self._stop_stream_flag()
-        try:
-            terminal = bool(self.backend.focused_is_terminal())
-        except Exception as e:
-            log(f"terminal detect: {e}")
-            terminal = False
         try:
             audio = self.recorder.stop()
         except Exception as e:
@@ -331,14 +370,22 @@ class FlowApp:
         self.backend.overlay_set_status("transcribing")
         threading.Thread(
             target=self._process,
-            args=(audio, terminal),
+            args=(audio,),
             daemon=True,
             name="mintflow-stt",
         ).start()
         return False
 
-    def _process(self, audio: np.ndarray, terminal: bool = False) -> None:
+    def _process(self, audio: np.ndarray, terminal: bool | None = None) -> None:
         try:
+            if terminal is None:
+                # Off the main thread: xprop/osascript/win32 lookups must not
+                # stall the event loop that is still animating the overlay.
+                try:
+                    terminal = bool(self.backend.focused_is_terminal())
+                except Exception as e:
+                    log(f"terminal detect: {e}")
+                    terminal = False
             self._join_stream()
             sr = int(self.cfg["sample_rate"])
             min_s = float(self.cfg.get("min_seconds", 0.35))
@@ -347,6 +394,11 @@ class FlowApp:
                 return
             rms = float(np.sqrt(np.mean(np.square(audio))) + 1e-12)
             if rms < RMS_SILENCE:
+                log(f"silence (rms {rms:.5f}), nothing to transcribe")
+                notify(
+                    "mintflow heard silence. Check that the right microphone is "
+                    "selected and not muted, then try mintflow test-mic."
+                )
                 self._ui(self._hide)
                 return
             vocab = load_vocabulary()
@@ -417,7 +469,8 @@ class FlowApp:
         vocab = load_vocabulary()
         tail_n = max(1, int(STREAM_TAIL_S * sr))
         lock_n = max(tail_n + 1, int(STREAM_LOCK_S * sr))
-        while not self._stream_stop.wait(interval):
+        wait = interval
+        while not self._stream_stop.wait(wait):
             if self.state != "listening":
                 break
             try:
@@ -427,11 +480,17 @@ class FlowApp:
                 continue
             if audio is None or audio.size < int(sr * 0.6):
                 continue
+            t0 = time.monotonic()
             try:
                 text = self._stream_transcribe(audio, sr, vocab, tail_n, lock_n)
             except Exception:
                 log("stream transcribe:\n" + traceback.format_exc())
                 continue
+            # The preview is a nicety; it must never starve the final pass. On a
+            # slow CPU one pass can outlast the interval, so back off to the time
+            # the last pass actually took instead of queueing up behind itself.
+            took = time.monotonic() - t0
+            wait = min(STREAM_MAX_INTERVAL_S, max(interval, took))
             if text and self.state == "listening" and not self._stream_stop.is_set():
                 self._ui(self._push_stream_text, text)
 

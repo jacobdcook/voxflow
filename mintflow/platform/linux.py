@@ -10,12 +10,17 @@ import threading
 import time
 
 from mintflow.config import log
+from mintflow.platform import BackendUnavailable
 
 try:
     from Xlib import XK, X, display as xdisplay
     from Xlib.ext import xtest
 except ImportError as e:
-    raise RuntimeError("Linux backend requires python-xlib (pip install python-xlib)") from e
+    raise BackendUnavailable(
+        "The hotkey needs python-xlib, which is not installed.\n"
+        "  Ubuntu / Debian / Mint:  sudo apt install python3-xlib\n"
+        "  Anything else:           pip install python-xlib"
+    ) from e
 
 try:
     import cairo
@@ -26,7 +31,12 @@ try:
     gi.require_version("PangoCairo", "1.0")
     from gi.repository import Gdk, GLib, Gtk, Pango, PangoCairo
 except (ImportError, ValueError) as e:
-    raise RuntimeError("Linux backend requires GTK3 / PyGObject (python3-gi)") from e
+    raise BackendUnavailable(
+        "The overlay needs GTK 3, which is not installed.\n"
+        "  Ubuntu / Debian / Mint:  sudo apt install python3-gi python3-gi-cairo "
+        "gir1.2-gtk-3.0\n"
+        "  Fedora:                  sudo dnf install python3-gobject gtk3"
+    ) from e
 
 TERMINAL_CLASSES = {
     "gnome-terminal",
@@ -86,6 +96,10 @@ SOUND_FILES = {
     "done": "/usr/share/sounds/freedesktop/stereo/message.oga",
     "error": "/usr/share/sounds/freedesktop/stereo/dialog-warning.oga",
 }
+
+# xclip/xprop/xdotool can wedge if the X server or a clipboard owner stalls.
+CMD_TIMEOUT_S = 3.0
+_INJECT_LOCK = threading.Lock()
 
 COMPACT_W = 280
 COMPACT_H = 64
@@ -196,10 +210,24 @@ class Overlay(Gtk.Window):
         self._t0 = time.monotonic()
         self._win_w = COMPACT_W
         self._win_h = COMPACT_H
+        self._tick_src = None
         self.set_size_request(COMPACT_W, COMPACT_H)
         self.connect("draw", self._on_draw)
         self.connect("realize", self._on_realize)
-        GLib.timeout_add(33, self._tick)
+
+    def start_animation(self) -> None:
+        # mintflow sits idle most of the day; a 30 Hz redraw timer that never
+        # stops is pure battery drain on a laptop.
+        if self._tick_src is None:
+            self._tick_src = GLib.timeout_add(33, self._tick)
+
+    def stop_animation(self) -> None:
+        if self._tick_src is not None:
+            try:
+                GLib.source_remove(self._tick_src)
+            except Exception:
+                pass
+            self._tick_src = None
 
     def _on_realize(self, *_args) -> None:
         gdk_win = self.get_window()
@@ -241,17 +269,34 @@ class Overlay(Gtk.Window):
         display = Gdk.Display.get_default()
         if display is None:
             return
-        seat = display.get_default_seat()
-        ptr = seat.get_pointer() if seat else None
-        x = y = 0
-        if ptr is not None:
-            _, x, y = ptr.get_position()
-        monitor = display.get_monitor_at_point(x, y) or display.get_primary_monitor()
+        monitor = None
+        # The text lands in the focused window, so put the overlay on that
+        # monitor. The pointer can easily be parked on a different screen.
+        try:
+            screen = Gdk.Screen.get_default()
+            active = screen.get_active_window() if screen else None
+            if active is not None:
+                monitor = display.get_monitor_at_window(active)
+        except Exception:
+            monitor = None
+        if monitor is None:
+            seat = display.get_default_seat()
+            ptr = seat.get_pointer() if seat else None
+            x = y = 0
+            if ptr is not None:
+                _, x, y = ptr.get_position()
+            monitor = display.get_monitor_at_point(x, y)
+        if monitor is None:
+            monitor = display.get_primary_monitor()
         if monitor is None:
             return
-        geo = monitor.get_geometry()
+        try:
+            geo = monitor.get_workarea()  # keeps clear of panels and docks
+        except Exception:
+            geo = monitor.get_geometry()
         w, h = self._win_w, self._win_h
-        self.move(geo.x + (geo.width - w) // 2, geo.y + geo.height - h - BOTTOM_MARGIN)
+        margin = min(BOTTOM_MARGIN, max(0, geo.height - h))
+        self.move(geo.x + (geo.width - w) // 2, geo.y + geo.height - h - margin)
 
     def set_status(self, status: str, level: float | None = None) -> None:
         self.status = status
@@ -274,7 +319,8 @@ class Overlay(Gtk.Window):
 
     def _tick(self) -> bool:
         if not self.get_visible():
-            return True
+            self._tick_src = None
+            return False
         target = 0.15 + self.level * 0.85
         t = time.monotonic() - self._t0
         n = len(self._bars)
@@ -369,13 +415,32 @@ class Overlay(Gtk.Window):
 # ---------------------------------------------------------------------------
 
 
-def focused_is_terminal() -> bool:
+def active_window_id() -> str:
     try:
-        wid = subprocess.check_output(["xdotool", "getactivewindow"], text=True).strip()
-        raw = subprocess.check_output(["xprop", "-id", wid, "WM_CLASS"], text=True)
-        return any(c.lower() in raw.lower() for c in TERMINAL_CLASSES)
+        return subprocess.check_output(
+            ["xdotool", "getactivewindow"],
+            text=True,
+            timeout=CMD_TIMEOUT_S,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except Exception:
+        return ""
+
+
+def focused_is_terminal() -> bool:
+    wid = active_window_id()
+    if not wid:
+        return False
+    try:
+        raw = subprocess.check_output(
+            ["xprop", "-id", wid, "WM_CLASS"],
+            text=True,
+            timeout=CMD_TIMEOUT_S,
+            stderr=subprocess.DEVNULL,
+        )
     except Exception:
         return False
+    return any(c.lower() in raw.lower() for c in TERMINAL_CLASSES)
 
 
 def clipboard_get() -> bytes:
@@ -383,51 +448,73 @@ def clipboard_get() -> bytes:
         return subprocess.check_output(
             ["xclip", "-selection", "clipboard", "-o"],
             stderr=subprocess.DEVNULL,
+            timeout=CMD_TIMEOUT_S,
         )
     except Exception:
         return b""
 
 
-def clipboard_set(text: str) -> None:
-    p = subprocess.Popen(["xclip", "-selection", "clipboard", "-i"], stdin=subprocess.PIPE)
-    p.communicate(text.encode("utf-8"))
-
-
 def clipboard_set_bytes(data: bytes) -> None:
     p = subprocess.Popen(["xclip", "-selection", "clipboard", "-i"], stdin=subprocess.PIPE)
-    p.communicate(data)
+    try:
+        p.communicate(data, timeout=CMD_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        log("xclip timed out while setting the clipboard")
+
+
+def clipboard_set(text: str) -> None:
+    clipboard_set_bytes(text.encode("utf-8"))
 
 
 def inject_text(text: str, restore_ms: int) -> None:
     if not text:
         return
-    old = clipboard_get()
-    clipboard_set(text)
-    time.sleep(0.04)
-    combo = "ctrl+shift+v" if focused_is_terminal() else "ctrl+v"
-    subprocess.run(
-        ["xdotool", "key", "--clearmodifiers", combo],
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    payload = text.encode("utf-8")
+    with _INJECT_LOCK:
+        old = clipboard_get()
+        clipboard_set_bytes(payload)
+        time.sleep(0.04)
+        combo = "ctrl+shift+v" if focused_is_terminal() else "ctrl+v"
+        subprocess.run(
+            ["xdotool", "key", "--clearmodifiers", combo],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=CMD_TIMEOUT_S,
+        )
 
     def restore():
         time.sleep(max(0, restore_ms) / 1000)
-        clipboard_set_bytes(old)
+        if not old:
+            # Nothing (or something we cannot represent as text) was there
+            # before. Clearing the clipboard would be worse than leaving ours.
+            return
+        with _INJECT_LOCK:
+            # Only undo our own paste. A newer dictation or a manual copy in the
+            # meantime must win, otherwise we clobber the user's clipboard.
+            if clipboard_get() != payload:
+                return
+            clipboard_set_bytes(old)
 
-    threading.Thread(target=restore, daemon=True).start()
+    threading.Thread(target=restore, daemon=True, name="mintflow-clip").start()
 
 
-def play_sound_file(kind: str) -> None:
+def play_sound_file(kind: str, volume: float = 0.3) -> None:
     path = SOUND_FILES.get(kind)
     if not path or not os.path.exists(path):
         return
-    subprocess.Popen(
-        ["paplay", "--volume", "18000", path],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    level = int(max(0.0, min(1.0, volume)) * 65536)
+    if level <= 0:
+        return
+    try:
+        subprocess.Popen(
+            ["paplay", "--volume", str(level), path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError as e:
+        log(f"paplay: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -731,8 +818,10 @@ class LinuxBackend:
 
     def overlay_show(self) -> None:
         self._overlay.show_all()
+        self._overlay.start_animation()
 
     def overlay_hide(self) -> None:
+        self._overlay.stop_animation()
         self._overlay.hide()
         self._overlay.reset()
 
@@ -787,7 +876,7 @@ class LinuxBackend:
         return focused_is_terminal()
 
     def play_sound(self, kind) -> None:
-        play_sound_file(kind)
+        play_sound_file(kind, float(self.cfg.get("sound_volume", 0.3)))
 
     def capture_hotkey(self, timeout_s=15) -> dict | None:
         return capture_hotkey_dialog(timeout_s)

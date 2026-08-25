@@ -5,6 +5,11 @@ from __future__ import annotations
 import sys
 
 
+class BackendUnavailable(RuntimeError):
+    """A desktop dependency is missing. The message is shown to the user as-is,
+    so it must say what to install, not what failed internally."""
+
+
 def detect_os() -> str:
     if sys.platform.startswith("linux"):
         return "linux"
@@ -29,7 +34,10 @@ def get_backend():
         from .windows import WindowsBackend
 
         return WindowsBackend()
-    raise RuntimeError(f"Unsupported platform: {sys.platform}")
+    raise BackendUnavailable(
+        f"mintflow does not support {sys.platform} yet. It runs on Linux (X11), "
+        "macOS, and Windows."
+    )
 
 
-__all__ = ["detect_os", "get_backend"]
+__all__ = ["BackendUnavailable", "detect_os", "get_backend"]

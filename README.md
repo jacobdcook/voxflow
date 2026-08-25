@@ -9,10 +9,6 @@ Talk instead of typing. Works everywhere.
 
 Local voice-to-text for Linux, macOS, and Windows. No account, no cloud, no word cap.
 
-![demo](demo.gif)
-
-*Demo coming soon.*
-
 ## How it works
 
 Hold a key, speak, and release. Cleaned text pastes into whatever app you are in.
@@ -25,7 +21,7 @@ Tap a non-typing key (Pause, F8, and similar) to start hands-free mode. Tap agai
 
 You need Python 3.10 or newer, a microphone, and (for the best cleanup) [Ollama](https://ollama.com) running on the same computer. The installers below check these for you.
 
-The first run downloads a Whisper speech model. That can take a few minutes and a gigabyte or two of disk, depending on your hardware.
+The first run downloads a Whisper speech model. Expect a few minutes and one to three gigabytes of disk, depending on which model your hardware gets.
 
 ### macOS
 
@@ -48,11 +44,14 @@ The first run downloads a Whisper speech model. That can take a few minutes and 
 
 5. A window will ask you to press your hotkey. Press the key you want to hold while talking, then you are done.
 
-Already have Python 3.10+ and Homebrew? You can install by hand:
+Already have Python 3.10+ and Homebrew? You can install by hand. Homebrew's Python
+refuses plain `pip install`, so put mintflow in its own small environment:
 
 ```bash
-brew install python portaudio ollama
-pip3 install "mintflow[desktop]"
+brew install python python-tk portaudio ollama
+python3 -m venv ~/.local/share/mintflow/venv
+~/.local/share/mintflow/venv/bin/pip install "mintflow[desktop]"
+ln -sf ~/.local/share/mintflow/venv/bin/mintflow ~/.local/bin/mintflow
 ollama pull qwen2.5:7b
 mintflow setup
 ```
@@ -99,11 +98,16 @@ Works on Ubuntu, Debian, Linux Mint, and other apt-based desktops. The overlay a
    The script may ask for your password so it can install packages (`xclip`, `xdotool`, PortAudio, GTK).
 3. A window will ask you to press your hotkey. Press the key you want to hold while talking.
 
-Already have Python 3.10+? You can install by hand:
+Already have Python 3.10+? You can install by hand. Recent Ubuntu, Debian, and Mint
+block plain `pip install` into the system Python, so use a small environment of its
+own (`--system-site-packages` is what lets it see the GTK and Xlib packages apt just
+installed):
 
 ```bash
-sudo apt install python3-pip python3-gi python3-gi-cairo python3-xlib xclip xdotool libportaudio2
-pip install --user "mintflow[linux]"
+sudo apt install python3-pip python3-venv python3-gi python3-gi-cairo python3-xlib xclip xdotool libportaudio2
+python3 -m venv --system-site-packages ~/.local/share/mintflow/venv
+~/.local/share/mintflow/venv/bin/pip install "mintflow[linux]"
+ln -sf ~/.local/share/mintflow/venv/bin/mintflow ~/.local/bin/mintflow
 ollama pull qwen2.5:7b
 mintflow setup
 ```
@@ -154,6 +158,7 @@ Open that file in any text editor, change a value, save, then run `mintflow quit
 | --- | --- | --- |
 | `hotkey` | `pause` | The key you hold to talk. Prefer `mintflow set-hotkey` over editing this by hand. |
 | `handsfree_max_s` | `180` | Longest hands-free recording, in seconds (3 minutes). |
+| `max_seconds` | `600` | Hard stop for any recording, in seconds (10 minutes). Protects you if a key sticks. |
 | `model` | `auto` | Whisper model size. `auto` picks one that fits your computer. |
 | `device` | `auto` | Where Whisper runs: `cpu` or `cuda`. `auto` detects a GPU. |
 | `compute_type` | `auto` | Internal number format. Leave on `auto` unless you know you need `float16` or `int8`. |
@@ -167,8 +172,9 @@ Open that file in any text editor, change a value, save, then run `mintflow quit
 | `repeat_ms` | `80` | Ignores keyboard repeat while you hold the key. |
 | `min_seconds` | `0.35` | Ignore recordings shorter than this (seconds). |
 | `sounds` | `true` | Play a short sound when recording starts and finishes. |
+| `sound_volume` | `0.3` | How loud those sounds are, from `0.0` to `1.0`. Windows plays them at the system volume. |
 | `restore_clipboard_ms` | `450` | After paste, put your old clipboard contents back. |
-| `stream_interval_s` | `1.0` | How often the overlay updates the words you are saying. |
+| `stream_interval_s` | `1.0` | How often the overlay updates the words you are saying. On a slow machine mintflow backs off on its own. |
 
 ## Custom vocabulary
 
@@ -218,6 +224,8 @@ Everything runs on your computer. Nothing leaves your machine.
 
 Speech is transcribed with Whisper on your CPU or GPU. Cleanup talks to Ollama on `127.0.0.1`. There is no mintflow account, no cloud API key, and no telemetry. If the network is unplugged, dictation still works (Ollama must already be installed and the Whisper model already downloaded).
 
+The only way a transcript leaves your computer is if you point `ollama_url` at another machine yourself. mintflow writes a warning to `mintflow.log` when you do.
+
 ## Troubleshooting
 
 **The overlay never appears.** Make sure mintflow is running (`mintflow`). Hold the hotkey for longer than a quick tap. On macOS, grant Accessibility. On Linux, use an X11 session, not Wayland.
@@ -226,7 +234,11 @@ Speech is transcribed with Whisper on your CPU or GPU. Cleanup talks to Ollama o
 
 **I spoke, but nothing pasted.** Click into a text field first. Try `mintflow test-inject` and see if the test sentence appears. On Linux, install `xclip` and `xdotool`. On macOS, allow Accessibility. Some apps block paste; click the field and try again.
 
-**The microphone is silent or too quiet.** Run `mintflow test-mic`, speak a sentence, and read what it prints. Check the OS microphone privacy toggle and the default input device. Close other apps that might be locking the mic.
+**The microphone is silent or too quiet.** Run `mintflow test-mic`, speak a sentence, and read what it prints. It tells you whether the problem is the device, the volume, or the language setting. Check the OS microphone privacy toggle and the default input device, and close other apps that might be holding the mic.
+
+**"mintflow heard silence."** The recording came through empty. Your computer is recording from a different device than the one you spoke into, or that device is muted. Pick the right input in your sound settings, then confirm with `mintflow test-mic`.
+
+**"mintflow is still finishing the last recording."** You pressed the hotkey again while the previous one was still being transcribed. Wait for the overlay to disappear, then talk again.
 
 **Names and jargon come out wrong.** Add them to `vocabulary.txt` (see [Custom vocabulary](#custom-vocabulary)).
 
@@ -261,7 +273,6 @@ Bug reports and pull requests are welcome. Please open an issue first for large 
 - Keep mintflow local-only. Do not add cloud STT or cloud LLM backends.
 - Read [PLAN.md](PLAN.md) for architecture, module layout, and overlay behavior.
 - Match the existing style. No AI co-author tags in commits.
-- Test the path you touch: `mintflow models`, `mintflow test-mic`, and a real hold-to-talk paste on your OS.
 
 ```bash
 git clone https://github.com/jacobdcook/mintflow.git
@@ -270,8 +281,19 @@ pip install -e ".[linux]"    # Linux
 pip install -e ".[desktop]"  # macOS or Windows
 ```
 
+Run the checks before you open a pull request. They need no display, microphone, or
+network, and they cover the hold/tap state machine, config loading, clipboard safety,
+packaging, and this README:
+
+```bash
+python3 tests/run_all.py
+```
+
+Then test the path you touched for real: `mintflow models`, `mintflow test-mic`, and
+one actual hold-to-talk paste on your OS.
+
 ## License
 
-[MIT](LICENSE). Copyright (c) 2024 Jacob Cook.
+[MIT](LICENSE). Copyright (c) 2026 Jacob Cook.
 
 You can use, copy, modify, and share mintflow. There is no warranty.
