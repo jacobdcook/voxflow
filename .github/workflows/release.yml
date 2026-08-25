@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+          ls -la dist
+
+      - name: Write release notes
+        run: |
+          cat > /tmp/release-notes.md <<'EOF'
+          Hold a key, speak, release. Cleaned text pastes into whatever app is focused.
+
+          Local-only: Whisper for speech-to-text, Ollama/Qwen for cleanup. No cloud, no account.
+
+          ## Install
+
+          **pip (Linux, macOS, Windows)**
+
+          ```
+          pip install mintflow
+          mintflow setup
+          ```
+
+          On macOS and Windows also install desktop extras:
+
+          ```
+          pip install "mintflow[desktop]"
+          ```
+
+          On Linux:
+
+          ```
+          pip install "mintflow[linux]"
+          ```
+
+          **macOS**
+
+          ```
+          git clone https://github.com/jacobdcook/mintflow.git
+          cd mintflow
+          bash scripts/install-mac.sh
+          ```
+
+          **Windows (PowerShell)**
+
+          ```
+          git clone https://github.com/jacobdcook/mintflow.git
+          cd mintflow
+          powershell -ExecutionPolicy Bypass -File .\scripts\install-win.ps1
+          ```
+
+          **Linux**
+
+          ```
+          git clone https://github.com/jacobdcook/mintflow.git
+          cd mintflow
+          bash scripts/install-linux.sh
+          ```
+
+          Full instructions: https://github.com/jacobdcook/mintflow#readme
+
+          Audio and text stay on your computer. Nothing is sent to the cloud.
+          EOF
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/*.whl dist/*.tar.gz \
+            --title "mintflow ${GITHUB_REF_NAME}" \
+            --notes-file /tmp/release-notes.md
