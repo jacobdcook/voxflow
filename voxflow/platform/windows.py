@@ -962,10 +962,12 @@ def _send_paste(terminal: bool) -> None:
             controller.press(shift)
         try:
             controller.press(v_key)
-            controller.release(v_key)
         finally:
-            if terminal:
-                controller.release(shift)
+            try:
+                controller.release(v_key)
+            finally:
+                if terminal:
+                    controller.release(shift)
     finally:
         controller.release(ctrl)
 
@@ -1104,6 +1106,10 @@ class HotkeyGrabber:
         self._block_vk: int | None = None
         self._live_mods: set[str] = set()
         self._repeat_timer: threading.Timer | None = None
+        # Guards _held, _block_vk, _live_mods and _repeat_timer, which are
+        # touched from the pynput listener thread, the low-level hook filter,
+        # release-debounce timer threads and the main thread (stop()).
+        self._lock = threading.RLock()
         self.on_cancel = None
         self._cancel_armed = False
 
@@ -1127,9 +1133,10 @@ class HotkeyGrabber:
         log(f"grabbed {self.spec}")
 
     def stop(self) -> None:
-        self._cancel_repeat()
-        self._held = False
-        self._block_vk = None
+        with self._lock:
+            self._cancel_repeat()
+            self._held = False
+            self._block_vk = None
         listener = self._listener
         self._listener = None
         if listener is None:
@@ -1154,9 +1161,10 @@ class HotkeyGrabber:
             self._replaying = False
 
     def _cancel_repeat(self) -> None:
-        if self._repeat_timer is not None:
-            self._repeat_timer.cancel()
-            self._repeat_timer = None
+        with self._lock:
+            if self._repeat_timer is not None:
+                self._repeat_timer.cancel()
+                self._repeat_timer = None
 
     def _matches_key(self, key) -> bool:
         if key is None:
@@ -1183,7 +1191,8 @@ class HotkeyGrabber:
         return False
 
     def _combo_down(self) -> bool:
-        live = self._live_mods or _async_mods()
+        with self._lock:
+            live = set(self._live_mods) or _async_mods()
         return live == self._required_mods
 
     def _vk_is_hotkey(self, vk: int) -> bool:
@@ -1203,12 +1212,13 @@ class HotkeyGrabber:
     def _should_suppress_vk(self, vk: int) -> bool:
         if self._replaying:
             return False
-        if self._block_vk is not None and vk == self._block_vk:
-            return True
-        if not self._vk_is_hotkey(vk):
-            return False
-        mods = self._live_mods or _async_mods()
-        return mods == self._required_mods or self._held
+        with self._lock:
+            if self._block_vk is not None and vk == self._block_vk:
+                return True
+            if not self._vk_is_hotkey(vk):
+                return False
+            mods = set(self._live_mods) or _async_mods()
+            return mods == self._required_mods or self._held
 
     def _on_press(self, key, injected=False) -> None:
         if injected or self._replaying:
@@ -1222,17 +1232,19 @@ class HotkeyGrabber:
             return
         name = _mod_name(key)
         if name:
-            self._live_mods.add(name)
+            with self._lock:
+                self._live_mods.add(name)
             return
         if not self._matches_key(key) or not self._combo_down():
             return
-        self._cancel_repeat()
-        vk = _vk_of(key)
-        if vk is not None:
-            self._block_vk = vk
-        if self._held:
-            return
-        self._held = True
+        with self._lock:
+            self._cancel_repeat()
+            vk = _vk_of(key)
+            if vk is not None:
+                self._block_vk = vk
+            if self._held:
+                return
+            self._held = True
         _schedule_safe(self._schedule, self.on_press)
 
     def _on_release(self, key, injected=False) -> None:
@@ -1240,25 +1252,28 @@ class HotkeyGrabber:
             return
         name = _mod_name(key)
         if name:
-            self._live_mods.discard(name)
+            with self._lock:
+                self._live_mods.discard(name)
             return
         if not self._matches_key(key):
             return
-        self._cancel_repeat()
-        delay = max(0, self.repeat_ms) / 1000
-        if delay <= 0:
-            self._finish_release()
-            return
-        self._repeat_timer = threading.Timer(delay, self._finish_release)
-        self._repeat_timer.daemon = True
-        self._repeat_timer.start()
+        with self._lock:
+            self._cancel_repeat()
+            delay = max(0, self.repeat_ms) / 1000
+            if delay <= 0:
+                self._finish_release()
+                return
+            self._repeat_timer = threading.Timer(delay, self._finish_release)
+            self._repeat_timer.daemon = True
+            self._repeat_timer.start()
 
     def _finish_release(self) -> None:
-        self._repeat_timer = None
-        if not self._held:
-            return
-        self._held = False
-        self._block_vk = None
+        with self._lock:
+            self._repeat_timer = None
+            if not self._held:
+                return
+            self._held = False
+            self._block_vk = None
         _schedule_safe(self._schedule, self.on_release)
 
     def _win32_filter(self, msg, data):
@@ -1277,10 +1292,11 @@ class HotkeyGrabber:
             return True
         name = _MOD_VKS.get(vk)
         if name:
-            if msg in (WM_KEYDOWN, WM_SYSKEYDOWN):
-                self._live_mods.add(name)
-            elif msg in (WM_KEYUP, WM_SYSKEYUP):
-                self._live_mods.discard(name)
+            with self._lock:
+                if msg in (WM_KEYDOWN, WM_SYSKEYDOWN):
+                    self._live_mods.add(name)
+                elif msg in (WM_KEYUP, WM_SYSKEYUP):
+                    self._live_mods.discard(name)
             listener._suppress = False
             return True
         listener._suppress = bool(self._should_suppress_vk(vk))

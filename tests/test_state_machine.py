@@ -1,9 +1,17 @@
 """Drive FlowApp against a fake backend that mimics the Linux repeat_ms debounce."""
+import os
 import sys
+import tempfile
 import threading
 import time
 
 import numpy as np
+
+# Keep the app's log()/notify() calls out of the user's real config dir when
+# this file is run directly (run_all.py also sets this for every suite).
+if "VOXFLOW_TEST_CFG" not in os.environ:
+    os.environ["VOXFLOW_TEST_CFG"] = tempfile.mkdtemp(prefix="voxflow-tests-")
+    os.environ["XDG_CONFIG_HOME"] = os.environ["VOXFLOW_TEST_CFG"]
 
 import voxflow.app as A
 

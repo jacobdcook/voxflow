@@ -242,6 +242,7 @@ class FlowApp:
         if committed and held_ms + 1.0 < float(self.cfg.get("tap_ms", 220)):
             committed = False
         if committed:
+            log(f"hotkey released after {held_ms / 1000.0:.1f}s hold")
             self.finish()
         else:
             self.abort_tap()
@@ -415,7 +416,10 @@ class FlowApp:
             t0 = time.monotonic()
             with self._engine_lock:
                 raw = self.engine.transcribe(audio, fast=False, vocab_prompt=vocab)
-            log(f"raw ({time.monotonic() - t0:.2f}s): {raw!r}")
+            log(
+                f"raw (audio {audio.size / sr:.1f}s, "
+                f"transcribe {time.monotonic() - t0:.2f}s): {raw!r}"
+            )
             if not raw:
                 self._ui(self._hide)
                 return
@@ -433,9 +437,16 @@ class FlowApp:
             self._ui_later(DONE_HIDE_MS, self._hide)
         except Exception:
             log("process failed:\n" + traceback.format_exc())
-            self._sound("error")
-            self._ui(self.backend.overlay_set_status, "error")
-            self._ui_later(ERROR_HIDE_MS, self._hide)
+            try:
+                self._sound("error")
+                self._ui(self.backend.overlay_set_status, "error")
+                self._ui_later(ERROR_HIDE_MS, self._hide)
+            except Exception:
+                # Even the error UI failed; reset state directly so the
+                # daemon is not stuck in "transcribing" until restart.
+                log("error UI failed:\n" + traceback.format_exc())
+                self.state = "idle"
+                self.handsfree = False
 
     def _enter_cleaning(self) -> None:
         self.state = "cleaning"
@@ -456,9 +467,16 @@ class FlowApp:
         self._join_stream(timeout=1.0)
         self._stream_confirmed = ""
         self._stream_confirmed_n = 0
-        self._stream_stop = threading.Event()
+        # The thread keeps its own reference to this event: if the old thread
+        # outlived the 1s join above, it must keep seeing its own (set) event,
+        # not this fresh one, or it would wake up inside the next recording.
+        stop = threading.Event()
+        self._stream_stop = stop
         self._stream_thread = threading.Thread(
-            target=self._stream_loop, daemon=True, name="voxflow-stream"
+            target=self._stream_loop,
+            args=(stop,),
+            daemon=True,
+            name="voxflow-stream",
         )
         self._stream_thread.start()
 
@@ -476,14 +494,14 @@ class FlowApp:
         if not t.is_alive():
             self._stream_thread = None
 
-    def _stream_loop(self) -> None:
+    def _stream_loop(self, stop: threading.Event) -> None:
         interval = float(self.cfg.get("stream_interval_s", 0.7))
         sr = int(self.cfg["sample_rate"])
         vocab = load_vocabulary()
         tail_n = max(1, int(STREAM_TAIL_S * sr))
         lock_n = max(tail_n + 1, int(STREAM_LOCK_S * sr))
         wait = interval
-        while not self._stream_stop.wait(wait):
+        while not stop.wait(wait):
             if self.state != "listening":
                 break
             try:
@@ -495,7 +513,7 @@ class FlowApp:
                 continue
             t0 = time.monotonic()
             try:
-                text = self._stream_transcribe(audio, sr, vocab, tail_n, lock_n)
+                text = self._stream_transcribe(audio, sr, vocab, tail_n, lock_n, stop)
             except Exception:
                 log("stream transcribe:\n" + traceback.format_exc())
                 continue
@@ -504,7 +522,7 @@ class FlowApp:
             # the last pass actually took instead of queueing up behind itself.
             took = time.monotonic() - t0
             wait = min(STREAM_MAX_INTERVAL_S, max(interval, took))
-            if text and self.state == "listening" and not self._stream_stop.is_set():
+            if text and self.state == "listening" and not stop.is_set():
                 self._ui(self._push_stream_text, text)
 
     def _stream_transcribe(
@@ -514,10 +532,12 @@ class FlowApp:
         vocab: str,
         tail_n: int,
         lock_n: int,
+        stop: threading.Event | None = None,
     ) -> str:
         n = int(audio.size)
+        stop = stop if stop is not None else self._stream_stop
         with self._engine_lock:
-            if self._stream_stop.is_set() or self.state != "listening":
+            if stop.is_set() or self.state != "listening":
                 return ""
             if n <= lock_n:
                 return self.engine.transcribe(audio, fast=True, vocab_prompt=vocab)

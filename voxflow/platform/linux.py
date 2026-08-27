@@ -469,11 +469,15 @@ def clipboard_set_bytes(data: bytes) -> None:
         p.communicate(data, timeout=CMD_TIMEOUT_S)
     except subprocess.TimeoutExpired:
         p.kill()
+        p.wait()
         log("xclip timed out while setting the clipboard")
 
 
 def clipboard_set(text: str) -> None:
     clipboard_set_bytes(text.encode("utf-8"))
+
+
+_last_inject: dict = {"payload": None, "old": b""}
 
 
 def inject_text(text: str, restore_ms: int) -> None:
@@ -482,6 +486,13 @@ def inject_text(text: str, restore_ms: int) -> None:
     payload = text.encode("utf-8")
     with _INJECT_LOCK:
         old = clipboard_get()
+        # Two dictations inside one restore window: the clipboard still holds
+        # our previous paste, so the user's real clipboard is the one we saved
+        # last time, not the payload we are about to overwrite.
+        if _last_inject["payload"] is not None and old == _last_inject["payload"]:
+            old = _last_inject["old"]
+        _last_inject["payload"] = payload
+        _last_inject["old"] = old
         clipboard_set_bytes(payload)
         time.sleep(0.04)
         combo = "ctrl+shift+v" if focused_is_terminal() else "ctrl+v"
@@ -554,6 +565,13 @@ class HotkeyGrabber(threading.Thread):
         self.tap_ms = tap_ms
         self.repeat_ms = repeat_ms
         self._stop = threading.Event()
+        # Xlib is not thread-safe: the grabber thread polls events while the
+        # main thread may call ungrab()/replay_tap()/stop(). Every dpy access
+        # goes through this lock.
+        self._x_lock = threading.RLock()
+        # Guards _held/_committed and the two debounce timers, which are
+        # touched by the grabber thread and by timer threads.
+        self._state_lock = threading.RLock()
         self.dpy = xdisplay.Display()
         self.root = self.dpy.screen().root
         self.mask, self.keyname = parse_hotkey(spec)
@@ -614,70 +632,85 @@ class HotkeyGrabber(threading.Thread):
         return [self.mask | extra for extra in EXTRA_MASKS]
 
     def grab(self) -> None:
-        for m in self._all_masks():
-            self.root.grab_key(self.keycode, m, True, X.GrabModeAsync, X.GrabModeAsync)
-        self.dpy.flush()
+        with self._x_lock:
+            for m in self._all_masks():
+                self.root.grab_key(
+                    self.keycode, m, True, X.GrabModeAsync, X.GrabModeAsync
+                )
+            self.dpy.flush()
         log(f"grabbed {self.spec}")
 
     def ungrab(self) -> None:
-        for m in self._all_masks():
-            self.root.ungrab_key(self.keycode, m)
-        self.dpy.flush()
+        with self._x_lock:
+            for m in self._all_masks():
+                self.root.ungrab_key(self.keycode, m)
+            self.dpy.flush()
 
     def replay_tap(self) -> None:
-        self.ungrab()
-        xtest.fake_input(self.dpy, X.KeyPress, self.keycode)
-        xtest.fake_input(self.dpy, X.KeyRelease, self.keycode)
-        self.dpy.flush()
-        self.grab()
+        with self._x_lock:
+            self.ungrab()
+            try:
+                xtest.fake_input(self.dpy, X.KeyPress, self.keycode)
+                xtest.fake_input(self.dpy, X.KeyRelease, self.keycode)
+                self.dpy.flush()
+            finally:
+                # Never leave the hotkey ungrabbed because the fake tap failed.
+                self.grab()
 
     def stop(self) -> None:
         self._stop.set()
-        self._cancel_stop_timer()
-        self._cancel_commit_timer()
+        with self._state_lock:
+            self._cancel_stop_timer()
+            self._cancel_commit_timer()
         try:
             self.ungrab()
         except Exception:
             pass
         try:
-            if self._cancel_grabbed:
-                for kc in self.cancel_keycodes:
-                    for m in EXTRA_MASKS:
-                        self.root.ungrab_key(kc, m)
-                self._cancel_grabbed = False
+            with self._x_lock:
+                if self._cancel_grabbed:
+                    for kc in self.cancel_keycodes:
+                        for m in EXTRA_MASKS:
+                            self.root.ungrab_key(kc, m)
+                    self._cancel_grabbed = False
         except Exception:
             pass
         try:
-            self.dpy.flush()
+            with self._x_lock:
+                self.dpy.flush()
         except Exception:
             pass
 
     def _cancel_stop_timer(self) -> None:
-        if self._stop_timer is not None:
-            self._stop_timer.cancel()
-            self._stop_timer = None
+        with self._state_lock:
+            if self._stop_timer is not None:
+                self._stop_timer.cancel()
+                self._stop_timer = None
 
     def _cancel_commit_timer(self) -> None:
-        if self._commit_timer is not None:
-            self._commit_timer.cancel()
-            self._commit_timer = None
+        with self._state_lock:
+            if self._commit_timer is not None:
+                self._commit_timer.cancel()
+                self._commit_timer = None
 
     def _commit_hold(self) -> None:
-        self._commit_timer = None
-        if not self._held or self._committed:
-            return
-        self._committed = True
+        with self._state_lock:
+            self._commit_timer = None
+            if not self._held or self._committed:
+                return
+            self._committed = True
         if self.on_commit:
             _schedule(self.on_commit)
 
     def _finish_release(self) -> None:
-        self._stop_timer = None
-        if not self._held:
-            return
-        self._held = False
-        self._cancel_commit_timer()
-        committed = self._committed
-        self._committed = False
+        with self._state_lock:
+            self._stop_timer = None
+            if not self._held:
+                return
+            self._held = False
+            self._cancel_commit_timer()
+            committed = self._committed
+            self._committed = False
         if committed:
             _schedule(self.on_end)
         else:
@@ -691,31 +724,59 @@ class HotkeyGrabber(threading.Thread):
         if self._cancel_want == self._cancel_grabbed:
             return
         try:
-            if self._cancel_want:
-                for kc in self.cancel_keycodes:
-                    for m in EXTRA_MASKS:
-                        self.root.grab_key(kc, m, True, X.GrabModeAsync, X.GrabModeAsync)
-            else:
-                for kc in self.cancel_keycodes:
-                    for m in EXTRA_MASKS:
-                        self.root.ungrab_key(kc, m)
-            self.dpy.flush()
+            with self._x_lock:
+                if self._cancel_want:
+                    for kc in self.cancel_keycodes:
+                        for m in EXTRA_MASKS:
+                            self.root.grab_key(
+                                kc, m, True, X.GrabModeAsync, X.GrabModeAsync
+                            )
+                else:
+                    for kc in self.cancel_keycodes:
+                        for m in EXTRA_MASKS:
+                            self.root.ungrab_key(kc, m)
+                self.dpy.flush()
             self._cancel_grabbed = self._cancel_want
         except Exception as e:
             log(f"cancel grab: {e}")
             self._cancel_grabbed = self._cancel_want
 
     def run(self) -> None:
-        self.grab()
-        self.root.change_attributes(event_mask=X.KeyPressMask | X.KeyReleaseMask)
+        try:
+            self.grab()
+            with self._x_lock:
+                self.root.change_attributes(
+                    event_mask=X.KeyPressMask | X.KeyReleaseMask
+                )
+        except Exception as e:
+            # Another client already grabbed this key (BadAccess) or the
+            # display is unusable. Surface it instead of dying silently.
+            log(f"hotkey grab failed for {self.spec}: {e}")
+            try:
+                subprocess.run(
+                    [
+                        "notify-send",
+                        "voxflow",
+                        f"Could not grab hotkey {self.spec}: already in use?",
+                    ],
+                    check=False,
+                    timeout=5,
+                )
+            except Exception:
+                pass
+            return
         while not self._stop.is_set():
             self._sync_cancel_grab()
-            if self.dpy.pending_events() == 0:
+            with self._x_lock:
+                pending = self.dpy.pending_events()
+            if pending == 0:
                 time.sleep(0.008)
                 continue
-            ev = self.dpy.next_event()
+            with self._x_lock:
+                ev = self.dpy.next_event()
             if ev.type == X.MappingNotify:
-                self.dpy.refresh_keyboard_mapping(ev)
+                with self._x_lock:
+                    self.dpy.refresh_keyboard_mapping(ev)
                 continue
             if (
                 ev.type == X.KeyPress
@@ -726,20 +787,26 @@ class HotkeyGrabber(threading.Thread):
                     _schedule(self.on_cancel)
                 continue
             if ev.type == X.KeyPress and getattr(ev, "detail", None) == self.keycode:
-                self._cancel_stop_timer()
-                if self._held:
-                    continue
-                self._held = True
-                self._committed = False
+                with self._state_lock:
+                    self._cancel_stop_timer()
+                    if self._held:
+                        continue
+                    self._held = True
+                    self._committed = False
+                    self._commit_timer = threading.Timer(
+                        self.tap_ms / 1000, self._commit_hold
+                    )
+                    self._commit_timer.daemon = True
+                    self._commit_timer.start()
                 _schedule(self.on_arm)
-                self._commit_timer = threading.Timer(self.tap_ms / 1000, self._commit_hold)
-                self._commit_timer.daemon = True
-                self._commit_timer.start()
             elif ev.type == X.KeyRelease and getattr(ev, "detail", None) == self.keycode:
-                self._cancel_stop_timer()
-                self._stop_timer = threading.Timer(self.repeat_ms / 1000, self._finish_release)
-                self._stop_timer.daemon = True
-                self._stop_timer.start()
+                with self._state_lock:
+                    self._cancel_stop_timer()
+                    self._stop_timer = threading.Timer(
+                        self.repeat_ms / 1000, self._finish_release
+                    )
+                    self._stop_timer.daemon = True
+                    self._stop_timer.start()
 
 
 # ---------------------------------------------------------------------------

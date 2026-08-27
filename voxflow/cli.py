@@ -390,9 +390,19 @@ def _clear_pid() -> None:
         if not PID_PATH.exists():
             return
         current = PID_PATH.read_text(encoding="utf-8").strip()
-        if current == str(os.getpid()) or not _pid_alive(int(current)):
+    except OSError:
+        # Could not read the file; assume another live daemon owns it.
+        return
+    try:
+        pid = int(current)
+    except ValueError:
+        # Corrupt pidfile: nothing meaningful to protect.
+        try:
             PID_PATH.unlink(missing_ok=True)
-    except (ValueError, OSError):
+        except OSError:
+            pass
+        return
+    if pid == os.getpid() or not _pid_alive(pid):
         try:
             PID_PATH.unlink(missing_ok=True)
         except OSError:

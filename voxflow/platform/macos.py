@@ -634,6 +634,7 @@ def clipboard_set_bytes(data: bytes) -> None:
         p.communicate(data or b"", timeout=CMD_TIMEOUT_S)
     except subprocess.TimeoutExpired:
         p.kill()
+        p.wait()
         log("pbcopy timed out while setting the clipboard")
 
 

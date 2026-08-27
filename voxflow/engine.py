@@ -15,6 +15,7 @@ import re
 from voxflow.cleanup import local_cleanup, ollama_rewrite
 from voxflow.config import (
     JUNK_PHRASES,
+    JUNK_PREFIXES,
     JUNK_TRANSCRIPTS,
     load_config,
     load_vocabulary,
@@ -48,7 +49,12 @@ def scrub_hallucinations(raw: str) -> str:
             continue
         if nc in JUNK_TRANSCRIPTS:
             continue
-        if any(nc == _norm_junk(p) or nc.startswith(_norm_junk(p)) for p in JUNK_PHRASES):
+        if any(nc == _norm_junk(p) for p in JUNK_PHRASES):
+            continue
+        if any(
+            nc == _norm_junk(p) or nc.startswith(_norm_junk(p) + " ")
+            for p in JUNK_PREFIXES
+        ):
             continue
         kept.append(chunk.strip())
     out = " ".join(kept).strip()

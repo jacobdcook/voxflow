@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "voxflow"
-version = "1.0.0"
+version = "1.0.1"
 description = "Hold a key, speak, release. Local voice-to-text with Whisper and Ollama."
 license = {text = "MIT"}
 authors = [{name = "Jacob Cook"}]

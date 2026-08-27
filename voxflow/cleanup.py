@@ -44,6 +44,7 @@ Rewrite the transcript as polished written text:
 - Convert spoken punctuation to symbols only when clearly used as a command ("question mark" at the end of a question becomes ?, "new line" becomes a line break, "new paragraph" becomes a blank line). If the phrase is part of the content ("the trial period ended"), leave the words alone.
 - Fix grammar, punctuation, and capitalization.
 - Keep the speaker's wording, tone, and meaning. Do not paraphrase, summarize, shorten, or add anything.
+- Preserve every distinct request, item, question, or clause. If the speaker asks for several things, keep all of them. Never merge multiple requests into one or drop any of them.
 - Plain punctuation only. Never use em dashes.
 - Output only the cleaned text, nothing else."""
 
@@ -72,6 +73,15 @@ REWRITE_EXAMPLES = [
     (
         "what time is the standup tomorrow question mark",
         "What time is the standup tomorrow?",
+    ),
+    (
+        "hey so um can you look for the the LinkedIn program I've been building so I "
+        "can search for it on Linux Mint and uh add it to the taskbar and also make "
+        "an applet so I can find it and like pin it to the task bar and yeah also make "
+        "an icon for it",
+        "Can you look for the LinkedIn program I've been building so I can search for "
+        "it on Linux Mint and add it to the taskbar, make an applet so I can find it "
+        "and pin it to the taskbar, and make an icon for it?",
     ),
 ]
 
@@ -163,7 +173,7 @@ def _sane_rewrite(out: str, raw: str) -> bool:
             return False
     raw_words = len(raw.split())
     out_words = len(out.split())
-    if raw_words >= 8 and not (raw_words * 0.3 <= out_words <= raw_words * 2.0):
+    if raw_words >= 8 and not (raw_words * 0.5 <= out_words <= raw_words * 2.0):
         return False
     return True
 
