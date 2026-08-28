@@ -106,6 +106,7 @@ jobs:
           name: voxflow-${{ matrix.label }}
           path: dist/voxflow-*.zip
           if-no-files-found: error
+          retention-days: 1
 
   wheel:
     name: Build wheel and sdist
@@ -124,6 +125,7 @@ jobs:
           path: |
             dist/*.whl
             dist/*.tar.gz
+          retention-days: 1
 
   release:
     name: Publish GitHub Release
